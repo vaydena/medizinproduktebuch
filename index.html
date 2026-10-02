@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vaydena Medizinproduktebuch – Medizinproduktebuch und Bestandsverzeichnis digital führen</title>
+<meta name="description" content="Medizinproduktebuch und Bestandsverzeichnis als Abo für Praxen, Pflegedienste und kleine Einrichtungen: Geräte erfassen, Prüffristen (STK/MTK) im Blick behalten, Einweisungen dokumentieren, QR-Etiketten drucken – auch ohne Internet. Dokumentationssoftware, kein Medizinprodukt. 14 Tage kostenlos testen.">
+<link rel="canonical" href="https://medizinproduktebuch.vaydena.de/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Vaydena Medizinproduktebuch – Geräte, Prüffristen und Einweisungen dokumentieren">
+<meta property="og:description" content="Bestandsverzeichnis und Medizinproduktebuch per Smartphone führen, QR-Etiketten drucken, offline dokumentieren. Ab 9 € im Monat, Zahlung per Überweisung oder GiroCode.">
+<meta property="og:url" content="https://medizinproduktebuch.vaydena.de/">
+<meta property="og:image" content="https://medizinproduktebuch.vaydena.de/assets/icons/icon-512.png">
+<meta name="theme-color" content="#0b1a24">
+<link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="assets/app.css?v=20261002">
+<style>
+  /* Hero-Visual: Smartphone mit Scanner */
+  .ph-qr{width:74px;height:74px;border-radius:4px;background:conic-gradient(#0b1a24 25%,#fff 0 50%,#0b1a24 0 75%,#fff 0) 0 0/14px 14px;border:5px solid #fff;outline:3px solid #0b1a24;outline-offset:-8px}
+  .hero-visual{position:relative;display:flex;justify-content:center;align-items:center;min-height:560px}
+  .phone{width:296px;background:#0b1a24;border-radius:40px;padding:12px;position:relative;
+    box-shadow:0 34px 70px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.12) inset}
+  .phone::before{content:"";position:absolute;top:12px;left:50%;transform:translateX(-50%);width:104px;height:24px;background:#0b1a24;border-radius:0 0 16px 16px;z-index:2}
+  .phone-screen{background:#f4f7f8;border-radius:30px;overflow:hidden;min-height:560px;display:flex;flex-direction:column;color:var(--ink)}
+  .ph-top{display:flex;justify-content:space-between;align-items:center;padding:36px 16px 10px;font-weight:800;font-size:13px}
+  .ph-top .st{font-weight:700;font-size:11px;padding:3px 9px;border-radius:999px;background:var(--gold-l);color:var(--gold-d);display:flex;gap:6px;align-items:center}
+  .ph-top .st i{width:7px;height:7px;border-radius:50%;background:var(--gold);display:inline-block}
+  .ph-cam{margin:4px 14px;background:linear-gradient(160deg,#1d3742,#0e222b);border-radius:16px;height:186px;position:relative;overflow:hidden;display:grid;place-items:center}
+  .ph-frame{position:absolute;inset:24px 34px;border:2px solid rgba(255,255,255,.5);border-radius:12px}
+  .ph-frame::before,.ph-frame::after{content:"";position:absolute;width:22px;height:22px;border:3px solid var(--gold)}
+  .ph-frame::before{top:-3px;left:-3px;border-right:0;border-bottom:0;border-radius:6px 0 0 0}
+  .ph-frame::after{bottom:-3px;right:-3px;border-left:0;border-top:0;border-radius:0 0 6px 0}
+  .ph-code{width:152px;background:#fff;border-radius:6px;padding:8px 10px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative}
+  .ph-bars{width:100%;height:38px;background:repeating-linear-gradient(90deg,#0b1a24 0 2px,#fff 2px 3px,#0b1a24 3px 4px,#fff 4px 7px,#0b1a24 7px 10px,#fff 10px 11px,#0b1a24 11px 12px,#fff 12px 15px,#0b1a24 15px 17px,#fff 17px 18px)}
+  .ph-code small{font-size:9px;letter-spacing:.14em;color:#0b1a24;font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .ph-laser{position:absolute;left:34px;right:34px;height:2px;background:var(--gold);box-shadow:0 0 12px var(--gold);animation:laser 2.4s ease-in-out infinite}
+  @keyframes laser{0%,100%{top:40px}50%{top:146px}}
+  .ph-hit{margin:12px 14px 0;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:var(--shadow-s);font-size:13px}
+  .ph-hit b{display:block;font-size:11.5px;color:var(--primary-d);letter-spacing:.08em;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .ph-hit span{display:block;font-weight:700;font-size:13.5px;margin:2px 0}
+  .ph-hit small{color:var(--muted);font-size:11.5px}
+  .ph-hit small em{color:var(--ok);font-style:normal;font-weight:800}
+  .ph-qty{display:flex;align-items:center;gap:8px;margin:10px 14px 0;font-size:12px;font-weight:700;color:var(--ink-2)}
+  .ph-qty span{flex:1;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;text-align:center;font-size:15px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .ph-qty b{width:36px;height:36px;border-radius:10px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font-size:18px}
+  .ph-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:10px 14px 0}
+  .ph-actions span{display:block;text-align:center;padding:11px 4px;border-radius:10px;font-weight:800;font-size:12px;background:#fff;border:1px solid var(--line);color:var(--ink-2)}
+  .ph-actions span.in{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .ph-queue{margin:auto 14px 16px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#7a4f06;background:var(--gold-l);border-radius:10px;padding:9px 12px;font-weight:700}
+  .ph-queue i{width:8px;height:8px;border-radius:50%;background:var(--gold);display:inline-block;animation:pulse 1.4s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .hero-visual .tag{position:absolute;background:#fff;color:var(--ink);border-radius:12px;padding:10px 14px;font-weight:700;font-size:.86rem;box-shadow:var(--shadow-m);display:flex;gap:8px;align-items:center;white-space:nowrap}
+  .hero-visual .tag svg{width:18px;height:18px;color:var(--primary);flex:0 0 auto}
+  .tag.t1{left:0;top:70px}.tag.t2{right:0;bottom:90px}
+  @media (max-width:1000px){.hero-visual .tag{display:none}}
+  @media (max-width:900px){.hero-visual{min-height:0}.phone{width:270px}.phone-screen{min-height:520px}}
+
+  /* Offline-Erklärung */
+  .ofx{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:var(--radius);padding:26px}
+  .ofx .k{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:11px;background:var(--gold);color:var(--navy);font-weight:800;margin-bottom:14px}
+  .ofx h3{color:#fff}
+  .ofx p{color:var(--navy-muted);margin:0;font-size:.97rem}
+  .technote{margin:28px auto 0;text-align:center;color:var(--navy-muted);font-size:.92rem;max-width:52em}
+
+  /* Preise */
+  .ptoggle-wrap{text-align:center;margin-bottom:34px}
+  .ptoggle{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px}
+  .ptoggle button{border:0;background:none;padding:9px 18px;border-radius:999px;font:inherit;font-weight:700;color:var(--ink-2);cursor:pointer;display:flex;align-items:center;gap:8px}
+  .ptoggle button.on{background:var(--primary);color:#fff}
+  .ptoggle .save{font-size:.72rem;background:var(--gold-l);color:var(--gold-d);padding:2px 8px;border-radius:999px}
+  .ptoggle button.on .save{background:var(--gold);color:var(--navy)}
+  .pricenote{max-width:46em;margin:28px auto 0;text-align:center;color:var(--muted);font-size:.93rem}
+
+  /* Kontakt */
+  .contact{display:grid;grid-template-columns:.9fr 1.1fr;gap:44px;align-items:start}
+  .contact .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:28px;box-shadow:var(--shadow-s)}
+  .contact .kv{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+  .contact .kv:last-child{border-bottom:0}
+  .contact .kv svg{width:20px;height:20px;color:var(--primary);flex:0 0 auto;margin-top:3px}
+  .contact .kv b{display:block;font-size:.85rem;color:var(--muted);font-weight:600}
+  .hp{position:absolute;left:-9999px;top:-9999px;height:0;width:0;opacity:0}
+  @media (max-width:900px){.contact{grid-template-columns:1fr}}
+</style>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Vaydena Medizinproduktebuch","applicationCategory":"BusinessApplication","operatingSystem":"Web, Android, iOS","url":"https://medizinproduktebuch.vaydena.de/","description":"Dokumentationssoftware für Bestandsverzeichnis und Medizinproduktebuch: Geräte, Prüffristen, Einweisungen, QR-Etiketten, Offline-Modus. Kein Medizinprodukt.","offers":[{"@type":"Offer","name":"Starter","price":"9.00","priceCurrency":"EUR"},{"@type":"Offer","name":"Team","price":"19.00","priceCurrency":"EUR"}],"provider":{"@type":"Organization","name":"Vaydena – Softwarelösungen","url":"https://vaydena.de"}}
+</script>
+</head>
+<body>
+
+<header class="site"><div class="wrap">
+  <div class="nav">
+    <a class="brand" href="index.html" aria-label="Vaydena Medizinproduktebuch – Startseite">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><path d="M38 20 29 35.6H11L2 20 11 4.4h18z" fill="#0e6f6b"/><circle cx="20" cy="20" r="8" fill="#0b1a24"/><path d="M38 20 29 35.6H11L2 20 11 4.4h18z" fill="none" stroke="#e0a423" stroke-width="2.4"/></svg>
+      <span>Vaydena<small>Medizinproduktebuch</small></span>
+    </a>
+    <div class="spacer"></div>
+    <nav class="nav-links" aria-label="Hauptnavigation">
+      <a href="#funktionen">Funktionen</a>
+      <a href="#offline">Offline</a>
+      <a href="#ablauf">So geht's</a>
+      <a href="#preise">Preise</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn ghost sm" href="anmelden.html">Anmelden</a>
+      <a class="btn gold sm" href="registrieren.html">Kostenlos testen</a>
+    </div>
+    <button class="nav-toggle" aria-label="Menü öffnen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  </div>
+  <div class="mobile-menu">
+    <a href="#funktionen">Funktionen</a>
+    <a href="#offline">Offline-Modus</a>
+    <a href="#ablauf">So funktioniert's</a>
+    <a href="#preise">Preise</a>
+    <a href="#faq">FAQ</a>
+    <a href="anmelden.html">Anmelden</a>
+    <a href="registrieren.html">Kostenlos testen</a>
+  </div>
+</div></header>
+
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow gold">Dokumentation als Abo · Praxis, Pflege, Therapie</p>
+      <h1>Medizinproduktebuch und Bestandsverzeichnis – <span class="hl">digital und griffbereit</span>.</h1>
+      <p class="lead">Geräte erfassen, QR-Etikett aufkleben, scannen, eintragen. Vaydena Medizinproduktebuch läuft im Browser und auf jedem Smartphone, zeigt Ihnen die hinterlegten Prüffristen und nimmt Einträge auch dann an, wenn im Behandlungsraum oder beim Hausbesuch gerade kein Netz ist.</p>
+      <div class="cta-row">
+        <a class="btn gold lg" href="registrieren.html">14 Tage kostenlos testen</a>
+        <a class="btn ghost on-navy lg" href="#ablauf">So funktioniert's</a>
+      </div>
+      <div class="trustline">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Keine Zahlungsdaten zum Testen</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Überweisung &amp; GiroCode</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Server in Frankfurt</span>
+      </div>
+    </div>
+    <div class="hero-visual" aria-hidden="true">
+      <div class="tag t1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>QR-Etikett selbst gedruckt</div>
+      <div class="phone"><div class="phone-screen">
+        <div class="ph-top"><span>Medizinproduktebuch</span><span class="st"><i></i>offline</span></div>
+        <div class="ph-cam">
+          <div class="ph-frame"></div>
+          <div class="ph-code"><div class="ph-qr"></div><small>MP-0012</small></div>
+          <div class="ph-laser"></div>
+        </div>
+        <div class="ph-hit"><b>MP-0012</b><span>Beispielgerät, Behandlungsraum 2</span><small>STK fällig in 21 Tagen · <em>4 Einweisungen</em></small></div>
+        <div class="ph-actions"><span class="in">Eintrag</span><span>Einweisung</span><span>Störung</span></div>
+        <div class="ph-queue"><i></i>2 Einträge warten auf Abgleich</div>
+      </div></div>
+      <div class="tag t2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4M4 19h16"/></svg>Wird später automatisch übertragen</div>
+    </div>
+  </div>
+</section>
+
+<section class="tight">
+  <div class="wrap">
+    <div class="sec-head"><p class="eyebrow">Für wen</p><h2>Gemacht für Einrichtungen ohne eigene Medizintechnik-Abteilung</h2><p>Für alle, die Medizinprodukte betreiben und ihre Dokumentation nicht länger im Ordner oder in einer Tabelle führen möchten.</p></div>
+    <div class="audience">
+      <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Arzt- &amp; Zahnarztpraxis</div>
+      <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>MVZ &amp; ambulantes OP-Zentrum</div>
+      <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Pflegedienst &amp; Pflegeheim</div>
+      <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Physio- &amp; Ergotherapie</div>
+      <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Rettungs- &amp; Sanitätsdienst</div>
+      <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Labor &amp; Betriebsarzt</div>
+    </div>
+  </div>
+</section>
+
+<section id="funktionen" class="alt">
+  <div class="wrap">
+    <div class="sec-head"><p class="eyebrow">Funktionen</p><h2>Die Dokumentation an einem Ort – am Gerät abrufbar.</h2><p>Sie tragen ein, was geprüft, eingewiesen oder repariert wurde. Die Software ordnet es dem Gerät zu und zeigt, was als Nächstes ansteht.</p></div>
+    <div class="grid g3">
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6v12M8 6v12M11 6v12M15 6v12M18 6v12M21 6v12"/></svg></div><h3>Bestandsverzeichnis</h3><p>Alle Geräte mit den Angaben, die § 14 MPBetreibV für das Bestandsverzeichnis nennt: Bezeichnung, Art und Typ, Seriennummer, Anschaffungsjahr, Hersteller, Standort und Frist der sicherheitstechnischen Kontrolle.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M6 12h12"/></svg></div><h3>Medizinproduktebuch je Gerät</h3><p>Funktionsprüfung, Einweisungen, Kontrollen, Instandhaltungen, Störungen und Vorkommnismeldungen – chronologisch beim Gerät, wie § 13 MPBetreibV es vorsieht.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .4-9A7 7 0 0 0 5.1 8.5 4 4 0 0 0 6 16"/><path d="m4 4 16 16"/></svg></div><h3>Prüffristen im Blick</h3><p>Sie hinterlegen das Datum der letzten Kontrolle und das Intervall. Die Fristenliste zeigt, was überfällig ist und was in den nächsten Wochen ansteht – für STK und MTK.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6M3 21h18"/></svg></div><h3>Einweisungen dokumentieren</h3><p>Wer wurde wann von wem in welches Gerät eingewiesen? Mehrere Personen in einem Schritt eintragen und beim Gerät nachschlagen.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></div><h3>QR-Etiketten drucken</h3><p>Zu jedem Gerät ein Etikett mit QR-Code und Inventarnummer, auf handelsüblichen Etikettenbögen. Scannen öffnet das Gerät direkt in der App.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><h3>Scannen mit dem Smartphone</h3><p>Die Kamera genügt. Wer vor dem Gerät steht, sieht nach einem Scan Stammdaten, Fristen und die letzten Einträge – und trägt gleich den nächsten ein.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div><h3>Wöchentliche Fristen-E-Mail</h3><p>Auf Wunsch erhalten Sie einmal pro Woche eine Übersicht der fälligen und bald fälligen Fristen an eine Adresse Ihrer Wahl.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></div><h3>Team mit Rollen</h3><p>Mitarbeitende dokumentieren Einträge, Administratoren verwalten Geräte, Standorte und Team. Jeder Eintrag trägt Namen und Zeitpunkt.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><h3>Berichtigen statt löschen</h3><p>Einträge im Medizinproduktebuch werden nicht überschrieben. Eine Berichtigung bleibt mit Grund und Urheber sichtbar, der ursprüngliche Eintrag ebenso.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg></div><h3>Drucken und exportieren</h3><p>Medizinproduktebuch eines Geräts und Bestandsverzeichnis als Druckansicht oder PDF, dazu CSV- und Vollexport. Ihre Daten können Sie jederzeit mitnehmen.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg></div><h3>Standorte und Räume</h3><p>Geräte Räumen, Etagen oder Fahrzeugen zuordnen und nach Standort filtern – praktisch bei Begehungen und beim Prüftermin.</p></div>
+      <div class="feature"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3 3 3-3"/></svg></div><h3>Als App installierbar</h3><p>Auf dem Startbildschirm ablegen und wie eine App öffnen – ohne App-Store, auf Android, iPhone, Tablet und PC.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="offline" class="navy-sec">
+  <div class="wrap">
+    <div class="sec-head"><p class="eyebrow gold">Offline-Modus</p><h2>Kein Netz im Behandlungsraum? Eintragen geht trotzdem.</h2><p>Die App hält Geräte, Personen und Einträge auf dem Smartphone vor und gleicht ab, sobald wieder Verbindung besteht.</p></div>
+    <div class="grid g3">
+      <div class="ofx"><div class="k">1</div><h3>Nachschlagen ohne Verbindung</h3><p>Geräte, Fristen und bisherige Einträge sind auf dem Gerät gespeichert und auch im Keller oder beim Hausbesuch abrufbar.</p></div>
+      <div class="ofx"><div class="k">2</div><h3>Einträge werden vorgemerkt</h3><p>Neue Einträge landen in einer Warteschlange auf dem Smartphone. Die App zeigt an, wie viele noch auf den Abgleich warten.</p></div>
+      <div class="ofx"><div class="k">3</div><h3>Automatischer Abgleich</h3><p>Sobald wieder Netz da ist, werden die Einträge übertragen – jeder genau einmal, mit dem Zeitpunkt der Erfassung.</p></div>
+    </div>
+    <p class="technote">Wichtig: Vorgemerkte Einträge liegen bis zur Übertragung nur auf dem jeweiligen Smartphone. Bringen Sie Geräte mit offenen Einträgen zeitnah wieder online.</p>
+  </div>
+</section>
+
+<section id="ablauf">
+  <div class="wrap">
+    <div class="sec-head"><p class="eyebrow">So geht's</p><h2>In vier Schritten startklar</h2></div>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><h3>Einrichtung anlegen</h3><p>Registrieren, E-Mail bestätigen, fertig. 14 Tage testen, ohne Zahlungsdaten.</p></div>
+      <div class="step"><div class="n">2</div><h3>Geräte erfassen</h3><p>Stammdaten eintragen, Standort zuordnen, Datum der letzten Kontrolle und Intervall hinterlegen.</p></div>
+      <div class="step"><div class="n">3</div><h3>Etiketten aufkleben</h3><p>QR-Etiketten drucken und an den Geräten anbringen. Team einladen.</p></div>
+      <div class="step"><div class="n">4</div><h3>Scannen und eintragen</h3><p>Einweisung, Kontrolle oder Störung direkt am Gerät dokumentieren. Die Fristenliste zeigt, was ansteht.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="preise" class="alt">
+  <div class="wrap">
+    <div class="sec-head"><p class="eyebrow">Preise</p><h2>Zwei Tarife, alle Funktionen</h2><p>Die Tarife unterscheiden sich nur in der Zahl der Nutzer und Geräte. Zahlung per Überweisung oder GiroCode, keine automatische Verlängerung.</p></div>
+    <div class="ptoggle" role="group" aria-label="Abrechnungszeitraum">
+      <button type="button" class="on" data-period="m">Monatlich</button>
+      <button type="button" data-period="j">Jährlich · 2 Monate gespart</button>
+    </div>
+    <div class="tiers">
+      <div class="tier">
+        <div class="tname">Test</div>
+        <div class="price">0 €<small> / 14 Tage</small></div>
+        <div class="per">ohne Zahlungsdaten, endet automatisch</div>
+        <p class="desc">Zum Ausprobieren mit echten Geräten.</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Alle Funktionen</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Unbegrenzt viele Nutzer</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Bis 1.000 Geräte</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Daten bleiben bei Tarifwahl erhalten</li>
+        </ul>
+        <a class="btn ghost block" href="registrieren.html">Kostenlos testen</a>
+      </div>
+      <div class="tier">
+        <div class="tname">Starter</div>
+        <div class="price" data-m="9" data-j="90">9 €<small> / Monat</small></div>
+        <div class="per" data-per-m="im Voraus, monatlich neu entscheiden" data-per-j="im Voraus, entspricht 7,50 € / Monat">im Voraus, monatlich neu entscheiden</div>
+        <p class="desc">Für die einzelne Praxis.</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Bis 3 Nutzer</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Bis 30 Geräte</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Bestandsverzeichnis und Medizinproduktebuch</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Fristenliste und Fristen-E-Mail</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>QR-Etiketten, Offline-Modus, Export</li>
+        </ul>
+        <a class="btn ghost block" href="registrieren.html">Mit Test starten</a>
+      </div>
+      <div class="tier pop">
+        <div class="badge">Beliebt</div>
+        <div class="tname">Team</div>
+        <div class="price" data-m="19" data-j="190">19 €<small> / Monat</small></div>
+        <div class="per" data-per-m="im Voraus, monatlich neu entscheiden" data-per-j="im Voraus, entspricht 15,83 € / Monat">im Voraus, monatlich neu entscheiden</div>
+        <p class="desc">Für größere Teams und mehrere Standorte.</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Unbegrenzt viele Nutzer</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Bis 1.000 Geräte</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Alles aus Starter</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Bevorzugter Support</li>
+        </ul>
+        <a class="btn primary block" href="registrieren.html">Mit Test starten</a>
+      </div>
+    </div>
+    <p class="pricenote">Alle Preise sind Endpreise. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. Mehr als 1.000 Geräte? <a href="#kontakt">Sprechen Sie uns an.</a></p>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head"><p class="eyebrow">FAQ</p><h2>Häufige Fragen</h2></div>
+    <div class="faq">
+      <details><summary>Ist die Software selbst ein Medizinprodukt?</summary><p>Nein. Vaydena Medizinproduktebuch ist eine reine Dokumentations- und Organisationssoftware. Sie dient nicht der Diagnose, Therapie oder Überwachung von Patienten, steuert keine Geräte und wertet keine Messwerte aus.</p></details>
+      <details><summary>Erfüllt die Software meine Betreiberpflichten?</summary><p>Nein, das kann keine Software. Sie hilft Ihnen, Bestandsverzeichnis und Medizinproduktebuch zu führen und Fristen im Blick zu behalten. Einweisungen und Kontrollen durchzuführen, geeignete Prüfer zu beauftragen und Fristen einzuhalten bleibt Aufgabe des Betreibers. Wir leisten keine Rechtsberatung.</p></details>
+      <details><summary>Darf ein Medizinproduktebuch elektronisch geführt werden?</summary><p>Die MPBetreibV lässt für das Medizinproduktebuch alle Datenträger zu (§ 13 Abs. 2). Welche Anforderungen Ihre zuständige Behörde im Einzelnen stellt, klären Sie bitte dort; Druckansicht und Export stehen jederzeit zur Verfügung.</p></details>
+      <details><summary>Werden Patientendaten gespeichert?</summary><p>Nein. Die Software ist nicht für Patientendaten bestimmt, und es gibt keine Felder dafür. Bitte tragen Sie solche Daten auch nicht in Notizfelder ein.</p></details>
+      <details><summary>Woher weiß die Software, wann eine Kontrolle fällig ist?</summary><p>Aus Ihren Angaben: Datum der letzten Kontrolle und das von Ihnen hinterlegte Intervall. Welche Frist für ein Gerät gilt, legen Sie anhand der Herstellerangaben und der MPBetreibV fest. Die Software prüft selbst keine Geräte.</p></details>
+      <details><summary>Brauche ich einen Barcode-Scanner?</summary><p>Nein. Die Kamera des Smartphones genügt. Ein Handscanner an PC oder Tablet funktioniert ebenfalls, und die Inventarnummer lässt sich auch eintippen.</p></details>
+      <details><summary>Was passiert nach Ablauf des Tests oder des Abos?</summary><p>Sie können weiter lesen, drucken und exportieren. Neue Einträge werden erst nach Bestellung eines Tarifs wieder übertragen. Es verlängert sich nichts automatisch.</p></details>
+      <details><summary>Wie lange muss ich das Medizinproduktebuch aufbewahren?</summary><p>Nach § 13 MPBetreibV ist es nach Außerbetriebnahme des Produkts noch fünf Jahre aufzubewahren. Sichern Sie Ihre Dokumentation deshalb vor einer Kündigung per Export oder Ausdruck.</p></details>
+      <details><summary>Wo liegen die Daten?</summary><p>Auf Servern in Frankfurt am Main. Die Inhalte Ihrer Einrichtung verarbeiten wir als Auftragsverarbeiter; einen Vertrag zur Auftragsverarbeitung stellen wir auf Anfrage bereit.</p></details>
+    </div>
+  </div>
+</section>
+
+<section id="kontakt" class="alt">
+  <div class="wrap">
+    <div class="contact">
+      <div>
+        <p class="eyebrow">Kontakt</p>
+        <h2>Fragen? Einrichtungshilfe? Einfach melden.</h2>
+        <p class="muted">Wir antworten in der Regel innerhalb eines Werktags. Gerne unterstützen wir Sie bei der Einrichtung.</p>
+        <div class="kv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg><div><b>E-Mail</b><a href="mailto:kontakt@vaydena.de">kontakt@vaydena.de</a></div></div>
+        <div class="kv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg><div><b>Telefon</b><a href="tel:+4915124012554">0151 24012554</a></div></div>
+        <div class="kv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5"/></svg><div><b>Anschrift</b>Vaydena – Softwarelösungen, Biberstraße 27, 85354 Freising</div></div>
+      </div>
+      <form class="card" id="leadForm" novalidate>
+        <div id="leadMsg" class="msg" role="status"></div>
+        <div class="field"><label for="lf-firma">Praxis / Einrichtung</label><input id="lf-firma" name="firma" type="text" maxlength="200" autocomplete="organization"></div>
+        <div class="field"><label for="lf-name">Name</label><input id="lf-name" name="name" type="text" maxlength="120" autocomplete="name"></div>
+        <div class="field"><label for="lf-email">E-Mail *</label><input id="lf-email" name="email" type="email" required maxlength="200" autocomplete="email"></div>
+        <div class="field"><label for="lf-msg">Nachricht *</label><textarea id="lf-msg" name="nachricht" rows="5" required maxlength="3000" placeholder="Wie viele Geräte betreiben Sie, was möchten Sie erreichen?"></textarea></div>
+        <div class="hp" aria-hidden="true"><label>Website<input name="website" type="text" tabindex="-1" autocomplete="off"></label></div>
+        <button class="btn primary block" type="submit">Nachricht senden</button>
+        <p class="formnote">Mit dem Absenden stimmen Sie der Verarbeitung Ihrer Angaben zur Bearbeitung der Anfrage zu. Details in der <a href="datenschutz.html">Datenschutzerklärung</a>.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="tight">
+  <div class="wrap">
+    <div class="ctaband center">
+      <h2>Heute Etiketten drucken, morgen scannen.</h2>
+      <p>14 Tage kostenlos mit allen Funktionen. Keine Zahlungsdaten, kein Vertrag, kein Risiko.</p>
+      <a class="btn gold lg" href="registrieren.html">Jetzt kostenlos testen</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site"><div class="wrap">
+  <div class="cols">
+    <div>
+      <a class="brand" href="index.html"><svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><path d="M38 20 29 35.6H11L2 20 11 4.4h18z" fill="#0e6f6b"/><circle cx="20" cy="20" r="8" fill="#0b1a24"/><path d="M38 20 29 35.6H11L2 20 11 4.4h18z" fill="none" stroke="#e0a423" stroke-width="2.4"/></svg><span>Vaydena<small>Medizinproduktebuch</small></span></a>
+      <p>Medizinproduktebuch und Bestandsverzeichnis per Smartphone – auch ohne Internet. Dokumentationssoftware, kein Medizinprodukt. Abrechnung per Überweisung und GiroCode.</p>
+    </div>
+    <div><h4>Produkt</h4><a href="#funktionen">Funktionen</a><a href="#offline">Offline-Modus</a><a href="#preise">Preise</a><a href="#faq">FAQ</a></div>
+    <div><h4>Konto</h4><a href="anmelden.html">Anmelden</a><a href="registrieren.html">Kostenlos testen</a><a href="app.html">App öffnen</a><a href="anmelden.html#passwort">Passwort vergessen</a></div>
+    <div><h4>Rechtliches</h4><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a><a href="agb.html">AGB</a><a href="mailto:kontakt@vaydena.de">kontakt@vaydena.de</a></div>
+  </div>
+  <div class="fbot"><span>© <span data-year>2026</span> Vaydena – Softwarelösungen · medizinproduktebuch.vaydena.de</span><span>Ein Produkt von <a href="https://vaydena.de">vaydena.de</a></span></div>
+</div></footer>
+
+<script src="assets/site.js"></script>
+<script src="assets/auth.js"></script>
+<script>
+(function () {
+  // Preis-Umschalter Monat/Jahr
+  var buttons = document.querySelectorAll('.ptoggle button');
+  function setPeriod(p) {
+    var yearly = p === 'jahr';
+    buttons.forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-period') === p); });
+    document.querySelectorAll('.tier .price[data-m]').forEach(function (el) {
+      el.innerHTML = (yearly ? el.getAttribute('data-j') : el.getAttribute('data-m')) + ' €<small> / ' + (yearly ? 'Jahr' : 'Monat') + '</small>';
+    });
+    document.querySelectorAll('.tier .per[data-per-m]').forEach(function (el) {
+      el.textContent = yearly ? el.getAttribute('data-per-j') : el.getAttribute('data-per-m');
+    });
+  }
+  buttons.forEach(function (b) { b.addEventListener('click', function () { setPeriod(b.getAttribute('data-period')); }); });
+
+  // Kontaktformular -> mpb-public "lead"
+  var form = document.getElementById('leadForm');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var msg = document.getElementById('leadMsg');
+    var btn = form.querySelector('button[type=submit]');
+    var email = form.email.value.trim(), text = form.nachricht.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.className = 'msg err'; msg.textContent = MP.ERRORS.bad_email; return; }
+    if (text.length < 5) { msg.className = 'msg err'; msg.textContent = MP.ERRORS.bad_message; return; }
+    btn.disabled = true; btn.textContent = 'Wird gesendet …'; msg.className = 'msg';
+    MP.publicCall('lead', { firma: form.firma.value.trim(), name: form.name.value.trim(), email: email, nachricht: text, hp: form.website.value })
+      .then(function (r) {
+        btn.disabled = false; btn.textContent = 'Nachricht senden';
+        if (r.data && r.data.ok) { msg.className = 'msg ok'; msg.textContent = 'Vielen Dank! Wir melden uns in der Regel innerhalb eines Werktags.'; form.reset(); }
+        else { msg.className = 'msg err'; msg.textContent = MP.errText(r); }
+      });
+  });
+})();
+</script>
+</body>
+</html>

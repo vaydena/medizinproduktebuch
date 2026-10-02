@@ -1,0 +1,60 @@
+{
+  "name": "Vaydena Medizinproduktebuch",
+  "short_name": "MP-Buch",
+  "description": "Medizinproduktebuch und Bestandsverzeichnis mit Prüffristen und Einweisungen – per Smartphone, auch ohne Internet.",
+  "id": "app.html",
+  "start_url": "app.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7f8",
+  "theme_color": "#0b1a24",
+  "lang": "de",
+  "dir": "ltr",
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Gerät scannen",
+      "short_name": "Scannen",
+      "url": "app.html#scan",
+      "icons": [
+        {
+          "src": "assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Fristen",
+      "short_name": "Fristen",
+      "url": "app.html#fristen",
+      "icons": [
+        {
+          "src": "assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
