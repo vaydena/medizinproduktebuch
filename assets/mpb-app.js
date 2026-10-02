@@ -312,7 +312,7 @@
     { id: "firma", label: "Einrichtung & Abo", icon: "building" },
     { id: "konto", label: "Konto", icon: "info" }
   ];
-  function navItems() { return NAV.filter(function (n) { return (!n.admin || isAdmin()) && (!n.btm || settings().btm); }); }
+  function navItems() { return NAV.filter(function (n) { return (!n.admin || isAdmin()) && (!n.btm || settings().btm || isAdmin()); }); }
   function renderNav() {
     var items = navItems(), side = byId("sidenav"), bottom = byId("bottomnav"), more = byId("moresheet");
     function link(n) { return '<a href="#' + n.id + '" data-nav="' + n.id + '">' + ic(n.icon) + '<span>' + esc(n.label) + '</span></a>'; }
@@ -342,7 +342,7 @@
       if (!hit) toast("Kein Gerät mit dieser Inventarnummer gefunden.", "warn");
       location.replace(hit ? "#geraete/" + encodeURIComponent(hit.rec.id) : "#scan"); return;
     }
-    if (!VIEWS[r.name] || (def && def.admin && !isAdmin()) || (def && def.btm && !settings().btm)) { location.replace("#uebersicht"); return; }
+    if (!VIEWS[r.name] || (def && def.admin && !isAdmin()) || (def && def.btm && !settings().btm && !isAdmin())) { location.replace("#uebersicht"); return; }
     if (App.view && App.viewName !== r.name && App.view.unmount) { try { App.view.unmount(); } catch (e) { console.error(e); } }
     closeModal(true); closeMore(); closeOverlay();
     App.viewName = r.name; App.view = VIEWS[r.name]; App.route = r; App.dirtyView = false;
@@ -1168,7 +1168,7 @@
   };
 
 
-  var APP_VERSION = "1.1 (2026-10-02)";
+  var APP_VERSION = "1.2 (2026-10-02)";
   var ROLES = { admin: "Administrator", mitarbeiter: "Mitarbeiter" };
   function roleLabel(r) { return ROLES[r] || r || "–"; }
   function onlineOr(msg) { if (navigator.onLine) return true; toast(msg || "Dafür ist eine Internetverbindung nötig.", "warn"); return false; }
@@ -1713,10 +1713,17 @@
   VIEWS.btm = {
     title: function (arg) { var i = arg && S.btmItems.get(arg); return i ? i.name : "BtM-Buch"; },
     render: function (arg) {
-      if (!btmOn()) return '<div class="card warn">Das Modul „BtM-Buch“ ist nicht aktiviert.</div>';
+      if (!btmOn()) return '<div class="card"><h2>Digitales BtM-Buch</h2>' +
+        '<p>Je Betäubungsmittel eine Karteikarte mit Zugängen, Abgängen und fortlaufendem Bestand, Storno statt Löschen, Monatsprüfung, Ausdruck und CSV-Export. Das Modul ist im Abo enthalten und für diese Einrichtung noch nicht eingeschaltet.</p>' +
+        '<div class="hint">Im BtM-Buch können bei Abgängen Namen von Patientinnen und Patienten stehen. Das sind Gesundheitsdaten – bitte schließen Sie vor der Nutzung einen Vertrag zur Auftragsverarbeitung mit uns (kontakt@vaydena.de). Ob diese Form des Nachweises für Ihre Einrichtung zulässig ist, klären Sie bitte mit Ihrer zuständigen Behörde.</div>' +
+        '<div class="btnrow"><button class="btn" type="button" data-act="btm-enable">BtM-Buch einschalten</button></div></div>';
       if (arg) { var i = S.btmItems.get(arg); return i ? btmCardHtml(i) : '<div class="card warn">Dieses Präparat wurde nicht gefunden.</div><p><a class="btn ghost sm" href="#btm">Zur Übersicht</a></p>'; }
       return btmListHtml();
     }
+  };
+  ACTIONS["btm-enable"] = function (el) {
+    var s = settings();
+    saveCompany({ settings: { site: s.site || "", due_mail: !!s.due_mail, due_mail_to: s.due_mail_to || "", due_days: s.due_days || 30, btm: true } }, "BtM-Buch eingeschaltet.", el).then(function (ok) { if (ok) renderView(); });
   };
   ACTIONS["btm-arch"] = function (el) { App.f.btm.arch = el.getAttribute("data-v") === "1"; renderView(); };
 
