@@ -68,6 +68,13 @@
     pending: [],            // wartende Einträge (in Reihenfolge)
     outbox: [],             // {kind:'location'|'person'|'device', id, ts, error?}
     failed: [],             // abgelehnte Einträge (zur Anzeige)
+    // Modul BtM-Buch (nur wenn in den Einstellungen zugeschaltet)
+    btmItems: new Map(),    // Präparate (Karteikarten); deleted = archiviert, bleibt lesbar
+    btmEntries: new Map(),  // bestätigte Zu- und Abgänge
+    btmPending: [],         // wartende Zu- und Abgänge (in Reihenfolge)
+    btmChecks: new Map(),   // bestätigte Monatsprüfungen
+    btmChecksPending: [],
+    btmFailed: [],          // abgelehnte BtM-Einträge und -Prüfungen (zur Anzeige)
     meta: { user_id: null, since: null, device_id: null, last_sync: null }
   };
   var idx = null;           // abgeleiteter Index (Einträge je Gerät, berichtigte Einträge)
@@ -98,6 +105,12 @@
       case "pending": return S.pending.slice();
       case "outbox": return S.outbox.slice();
       case "failed": return S.failed.slice();
+      case "btmItems": return toArr(S.btmItems);
+      case "btmEntries": return toArr(S.btmEntries);
+      case "btmPending": return S.btmPending.slice();
+      case "btmChecks": return toArr(S.btmChecks);
+      case "btmChecksPending": return S.btmChecksPending.slice();
+      case "btmFailed": return S.btmFailed.slice();
       case "members": return S.members.slice();
       case "tenant": return S.tenant;
       case "member": return S.member;
@@ -137,14 +150,15 @@
         // Nicht übertragene Einträge/Änderungen des Vorgängers aber zurücklegen (gemeinsam genutzte Tablets),
         // sie kommen bei seiner nächsten Anmeldung wieder in die Warteschlange.
         var old = meta.user_id;
-        return Promise.all([kvGet("pending"), kvGet("outbox"), kvGet("failed"), kvGet("parked"), kvGet("locations"), kvGet("persons"), kvGet("devices")]).then(function (r) {
+        return Promise.all([kvGet("pending"), kvGet("outbox"), kvGet("failed"), kvGet("parked"), kvGet("locations"), kvGet("persons"), kvGet("devices"), kvGet("btmItems"), kvGet("btmPending"), kvGet("btmChecksPending")]).then(function (r) {
           var parked = r[3] || {}, p = parked[old] || { pending: [], outbox: [], failed: [], records: [] };
+          p.btmPending = (p.btmPending || []).concat(r[8] || []); p.btmChecksPending = (p.btmChecksPending || []).concat(r[9] || []);
           var ob = r[1] || [];
           p.pending = p.pending.concat(r[0] || []); p.outbox = p.outbox.concat(ob); p.failed = p.failed.concat(r[2] || []);
           // die zur Outbox gehörenden Stammdatensätze mit zurücklegen, sonst gingen offline angelegte Geräte verloren
-          var src = { location: fromArr(r[4]), person: fromArr(r[5]), device: fromArr(r[6]) };
+          var src = { location: fromArr(r[4]), person: fromArr(r[5]), device: fromArr(r[6]), btm_item: fromArr(r[7]) };
           p.records = (p.records || []).concat(ob.map(function (o) { var rec = src[o.kind] && src[o.kind].get(o.id); return rec ? { kind: o.kind, rec: rec } : null; }).filter(Boolean));
-          if (p.pending.length || p.outbox.length || p.failed.length) parked[old] = p;
+          if (p.pending.length || p.outbox.length || p.failed.length || p.btmPending.length || p.btmChecksPending.length) parked[old] = p;
           return kvClear().then(function () { return kvSet("parked", parked); }).then(function () { return null; });
         });
       }
@@ -153,11 +167,14 @@
       if (meta) S.meta = Object.assign(S.meta, meta);
       S.meta.user_id = userId || S.meta.user_id;
       if (!S.meta.device_id) S.meta.device_id = "dev-" + uuid().slice(0, 8);
-      return Promise.all([kvGet("tenant"), kvGet("member"), kvGet("members"), kvGet("locations"), kvGet("persons"), kvGet("devices"), kvGet("entries"), kvGet("pending"), kvGet("outbox"), kvGet("failed")]);
+      return Promise.all([kvGet("tenant"), kvGet("member"), kvGet("members"), kvGet("locations"), kvGet("persons"), kvGet("devices"), kvGet("entries"), kvGet("pending"), kvGet("outbox"), kvGet("failed"),
+        kvGet("btmItems"), kvGet("btmEntries"), kvGet("btmPending"), kvGet("btmChecks"), kvGet("btmChecksPending"), kvGet("btmFailed")]);
     }).then(function (r) {
       S.tenant = r[0] || null; S.member = r[1] || null; S.members = r[2] || [];
       S.locations = fromArr(r[3]); S.persons = fromArr(r[4]); S.devices = fromArr(r[5]); S.entries = fromArr(r[6]);
       S.pending = r[7] || []; S.outbox = r[8] || []; S.failed = r[9] || [];
+      S.btmItems = fromArr(r[10]); S.btmEntries = fromArr(r[11]); S.btmPending = r[12] || [];
+      S.btmChecks = fromArr(r[13]); S.btmChecksPending = r[14] || []; S.btmFailed = r[15] || [];
       return kvGet("parked");
     }).then(function (parked) {
       var mine = parked && S.meta.user_id && parked[S.meta.user_id];
@@ -167,13 +184,16 @@
         var ids = {}; S.pending.forEach(function (m) { ids[m.id] = true; });
         S.pending = S.pending.concat(mine.pending.filter(function (m) { return !ids[m.id]; }));
         S.failed = S.failed.concat(mine.failed);
+        var bids = {}; S.btmPending.concat(S.btmChecksPending).forEach(function (m) { bids[m.id] = true; });
+        S.btmPending = S.btmPending.concat((mine.btmPending || []).filter(function (m) { return !bids[m.id]; }));
+        S.btmChecksPending = S.btmChecksPending.concat((mine.btmChecksPending || []).filter(function (m) { return !bids[m.id]; }));
         (mine.records || []).forEach(function (x) {
           var map = mapOf(x.kind);
           if (map && !map.has(x.rec.id)) map.set(x.rec.id, x.rec);
         });
         mine.outbox.forEach(function (o) { if (!hasPendingChange(o.kind, o.id)) S.outbox.push(o); });
         delete parked[S.meta.user_id];
-        restore = kvSet("parked", parked).then(function () { return save(["pending", "outbox", "failed", "locations", "persons", "devices"], true); });
+        restore = kvSet("parked", parked).then(function () { return save(["pending", "outbox", "failed", "locations", "persons", "devices", "btmItems", "btmPending", "btmChecksPending"], true); });
       }
       S.ready = true; idx = null;
       return restore.then(function () { return save("meta", true); });
@@ -184,6 +204,7 @@
     S.tenant = null; S.member = null; S.members = [];
     S.locations = new Map(); S.persons = new Map(); S.devices = new Map(); S.entries = new Map();
     S.pending = []; S.outbox = []; S.failed = [];
+    S.btmItems = new Map(); S.btmEntries = new Map(); S.btmPending = []; S.btmChecks = new Map(); S.btmChecksPending = []; S.btmFailed = [];
     S.meta = { user_id: S.meta.user_id, since: null, device_id: dev, last_sync: null };
     dirty = {}; idx = null;
     // zurückgelegte Einträge anderer Nutzer dieses Geräts nicht mitlöschen
@@ -193,8 +214,8 @@
   }
 
   // ---------- Stammdaten (lokale Änderungen -> Outbox) ----------
-  var KEYS = { location: "locations", person: "persons", device: "devices" };
-  function mapOf(kind) { return kind === "location" ? S.locations : kind === "person" ? S.persons : kind === "device" ? S.devices : null; }
+  var KEYS = { location: "locations", person: "persons", device: "devices", btm_item: "btmItems" };
+  function mapOf(kind) { return kind === "location" ? S.locations : kind === "person" ? S.persons : kind === "device" ? S.devices : kind === "btm_item" ? S.btmItems : null; }
   function queue(kind, id) {
     var e = S.outbox.find(function (o) { return o.kind === kind && o.id === id; });
     if (e) { e.ts = nowIso(); delete e.error; delete e.error_at; }
@@ -216,7 +237,7 @@
   function dropOutbox(entry, discardRecord) {
     S.outbox = S.outbox.filter(function (o) { return !(o.kind === entry.kind && o.id === entry.id); });
     if (discardRecord) { var m = mapOf(entry.kind); if (m) m.delete(entry.id); idx = null; }
-    return save(["outbox", "locations", "persons", "devices"], true).then(function () { emit("change", { kind: "outbox" }); });
+    return save(["outbox", "locations", "persons", "devices", "btmItems"], true).then(function () { emit("change", { kind: "outbox" }); });
   }
 
   // ---------- Einträge des Medizinproduktebuchs ----------
@@ -240,7 +261,45 @@
     S.failed.unshift(e); if (S.failed.length > 50) S.failed.length = 50;
     idx = null; markDirty(["pending", "failed"]);
   }
-  function clearFailed() { S.failed = []; return save("failed", true); }
+  function clearFailed() { S.failed = []; S.btmFailed = []; return save(["failed", "btmFailed"], true); }
+
+  // ---------- BtM-Buch: Zu- und Abgänge, Monatsprüfungen (nur anfügen) ----------
+  function btmList(what) { return what === "check" ? S.btmChecksPending : S.btmPending; }
+  function btmKeys(what) { return what === "check" ? ["btmChecksPending", "btmChecks"] : ["btmPending", "btmEntries"]; }
+  function addBtmPending(what, e) {
+    e.pending = true; btmList(what).push(e); idx = null;
+    return save(btmKeys(what)[0], true).then(function () { emit("change", { kind: "btm_" + what, id: e.id }); return e; });
+  }
+  function confirmBtm(what, id, receivedAt, seq) {
+    var l = btmList(what), i = l.findIndex(function (m) { return m.id === id; });
+    if (i < 0) return;
+    var e = l.splice(i, 1)[0]; delete e.pending;
+    e.received_at = receivedAt || nowIso(); if (seq != null) e.seq = seq;
+    (what === "check" ? S.btmChecks : S.btmEntries).set(e.id, e); idx = null;
+    markDirty(btmKeys(what));
+  }
+  function rejectBtm(what, id, error) {
+    var l = btmList(what), i = l.findIndex(function (m) { return m.id === id; });
+    if (i < 0) return;
+    var e = l.splice(i, 1)[0]; e.error = error; e.failed_at = nowIso(); e.what = what; delete e.pending;
+    S.btmFailed.unshift(e); if (S.btmFailed.length > 50) S.btmFailed.length = 50;
+    idx = null; markDirty([btmKeys(what)[0], "btmFailed"]);
+  }
+  function round3(n) { return Math.round(n * 1000) / 1000; }
+  // Karteikarte: Einträge in der Reihenfolge der Eintragung (seq), wartende hinten; Bestand fortlaufend errechnet
+  function btmCard(itemId) { return index().btmByItem.get(itemId) || []; }
+  function btmStock(itemId) { var l = btmCard(itemId); return l.length ? l[l.length - 1].bal : 0; }
+  function btmCorrectionOf(entryId) { return index().btmCorrected.get(entryId) || null; }
+  function getBtmEntry(id) { return S.btmEntries.get(id) || S.btmPending.find(function (e) { return e.id === id; }) || null; }
+  function btmChecksOf(itemId) {
+    var out = [];
+    S.btmChecks.forEach(function (c) { if (c.item_id === itemId) out.push(c); });
+    S.btmChecksPending.forEach(function (c) { if (c.item_id === itemId) out.push(c); });
+    return out.sort(function (a, b) { return (b.month || "").localeCompare(a.month || "") || (b.created_at || "").localeCompare(a.created_at || ""); });
+  }
+  function btmItemsList(archived) {
+    return toArr(S.btmItems).filter(function (i) { return !!i.deleted === !!archived; }).sort(byName);
+  }
 
   function cmpEntry(a, b) {   // neueste zuerst: Datum, dann Erfassungszeit
     return (b.date || "").localeCompare(a.date || "") || (b.created_at || "").localeCompare(a.created_at || "");
@@ -255,7 +314,14 @@
     }
     S.entries.forEach(add); S.pending.forEach(add);
     byDevice.forEach(function (l) { l.sort(cmpEntry); });
-    idx = { byDevice: byDevice, corrected: corrected };
+    var btmByItem = new Map(), btmCorrected = new Map(), conf = toArr(S.btmEntries).sort(function (a, b) { return Number(a.seq) - Number(b.seq); });
+    conf.concat(S.btmPending).forEach(function (e) {
+      var l = btmByItem.get(e.item_id); if (!l) btmByItem.set(e.item_id, l = []);
+      var prev = l.length ? l[l.length - 1].bal : 0, q = Number(e.qty) || 0;
+      l.push({ e: e, bal: round3(prev + (e.kind === "zugang" ? q : -q)) });
+      if (e.corrects) btmCorrected.set(e.corrects, e);
+    });
+    idx = { byDevice: byDevice, corrected: corrected, btmByItem: btmByItem, btmCorrected: btmCorrected };
     return idx;
   }
   function entriesOf(deviceId) { return index().byDevice.get(deviceId) || []; }
@@ -384,6 +450,9 @@
     dropOutbox: dropOutbox, hasPendingChange: hasPendingChange, queue: queue, mapOf: mapOf,
     addPending: addPending, confirmEntry: confirmEntry, rejectEntry: rejectEntry, clearFailed: clearFailed,
     entriesOf: entriesOf, getEntry: getEntry, correctionOf: correctionOf, lastOf: lastOf,
+    upsertBtmItem: function (r) { return upsert("btm_item", r); },
+    addBtmPending: addBtmPending, confirmBtm: confirmBtm, rejectBtm: rejectBtm,
+    btmCard: btmCard, btmStock: btmStock, btmCorrectionOf: btmCorrectionOf, getBtmEntry: getBtmEntry, btmChecksOf: btmChecksOf, btmItemsList: btmItemsList, round3: round3,
     stkDue: stkDue, mtkDue: mtkDue, dueOf: dueOf, dueState: dueState, dueList: dueList, deviceState: deviceState, daysUntil: daysUntil, inService: inService, warnDays: warnDaysDefault,
     activeLocations: activeLocations, activePersons: activePersons, activeDevices: activeDevices, deviceCount: deviceCount, locName: locName,
     codeFromScan: codeFromScan, resolveCode: resolveCode, invNoInUse: invNoInUse, findDevices: findDevices, nextInvNo: nextInvNo, memberName: memberName

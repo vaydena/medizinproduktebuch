@@ -10,7 +10,7 @@
     booted: false, view: null, viewName: "", route: { name: "uebersicht", arg: "" }, modal: null, dirtyView: false,
     installPrompt: null, userId: null, userEmail: "",
     cam: { on: false, resume: false }, scan: { queued: null, last: null },
-    f: { geraete: { q: "", state: "betrieb" }, fristen: { state: "alle" }, personen: { q: "" }, etiketten: { q: "", sel: {} } },
+    f: { geraete: { q: "", state: "betrieb" }, fristen: { state: "alle" }, personen: { q: "" }, etiketten: { q: "", sel: {} }, btm: { arch: false } },
     firma: { period: "monat", invoices: null, result: null },
     team: { list: null, limit: null, invite: null },
     audit: { entries: null, more: false, loading: false }
@@ -70,6 +70,15 @@
     network: "Keine Verbindung zum Server.",
     rate_limited: "Zu viele Anfragen. Bitte kurz warten.",
     client_error: "Beim Abgleich ist ein Fehler aufgetreten.",
+    btm_off: "Das Modul „BtM-Buch“ ist für diese Einrichtung nicht aktiviert.",
+    btm_negative: "Der Bestand reicht dafür nicht aus – er würde negativ.",
+    btm_bad_qty: "Bitte eine Menge größer als 0 angeben (höchstens drei Nachkommastellen).",
+    btm_has_stock: "Archivieren ist erst möglich, wenn der Bestand 0 beträgt.",
+    btm_unit_fixed: "Die Einheit lässt sich nach der ersten Buchung nicht mehr ändern.",
+    btm_item_archived: "Dieses Präparat ist archiviert – neue Einträge sind nicht möglich.",
+    btm_item_not_found: "Das Präparat wurde auf dem Server nicht gefunden.",
+    bad_corrects: "Eine Storno-Buchung kann nicht selbst storniert werden.",
+    already_corrected: "Dieser Eintrag wurde bereits storniert bzw. berichtigt.",
     server_error: "Serverfehler. Bitte später erneut versuchen.",
     error: "Unbekannter Fehler."
   });
@@ -295,6 +304,7 @@
     { id: "scan", label: "Scannen", icon: "scan" },
     { id: "fristen", label: "Fristen", icon: "history" },
     { id: "personen", label: "Personen", icon: "users" },
+    { id: "btm", label: "BtM-Buch", icon: "clipboard", btm: true },
     { id: "standorte", label: "Standorte", icon: "pin", admin: true },
     { id: "etiketten", label: "Etiketten", icon: "tag" },
     { id: "team", label: "Team", icon: "user", admin: true },
@@ -302,7 +312,7 @@
     { id: "firma", label: "Einrichtung & Abo", icon: "building" },
     { id: "konto", label: "Konto", icon: "info" }
   ];
-  function navItems() { return NAV.filter(function (n) { return !n.admin || isAdmin(); }); }
+  function navItems() { return NAV.filter(function (n) { return (!n.admin || isAdmin()) && (!n.btm || settings().btm); }); }
   function renderNav() {
     var items = navItems(), side = byId("sidenav"), bottom = byId("bottomnav"), more = byId("moresheet");
     function link(n) { return '<a href="#' + n.id + '" data-nav="' + n.id + '">' + ic(n.icon) + '<span>' + esc(n.label) + '</span></a>'; }
@@ -332,7 +342,7 @@
       if (!hit) toast("Kein Gerät mit dieser Inventarnummer gefunden.", "warn");
       location.replace(hit ? "#geraete/" + encodeURIComponent(hit.rec.id) : "#scan"); return;
     }
-    if (!VIEWS[r.name] || (def && def.admin && !isAdmin())) { location.replace("#uebersicht"); return; }
+    if (!VIEWS[r.name] || (def && def.admin && !isAdmin()) || (def && def.btm && !settings().btm)) { location.replace("#uebersicht"); return; }
     if (App.view && App.viewName !== r.name && App.view.unmount) { try { App.view.unmount(); } catch (e) { console.error(e); } }
     closeModal(true); closeMore(); closeOverlay();
     App.viewName = r.name; App.view = VIEWS[r.name]; App.route = r; App.dirtyView = false;
@@ -1158,7 +1168,7 @@
   };
 
 
-  var APP_VERSION = "1.0 (2026-10-02)";
+  var APP_VERSION = "1.1 (2026-10-02)";
   var ROLES = { admin: "Administrator", mitarbeiter: "Mitarbeiter" };
   function roleLabel(r) { return ROLES[r] || r || "–"; }
   function onlineOr(msg) { if (navigator.onLine) return true; toast(msg || "Dafür ist eine Internetverbindung nötig.", "warn"); return false; }
@@ -1220,7 +1230,8 @@
   var AUDIT = {
     location_deleted: "Standort gelöscht", person_deleted: "Person gelöscht", device_deleted: "Gerät gelöscht", entry_corrected: "Eintrag berichtigt",
     member_invited: "Teammitglied eingeladen", member_changed: "Teammitglied geändert", member_removed: "Teammitglied entfernt",
-    company_changed: "Daten der Einrichtung geändert", plan_chosen: "Tarif bestellt"
+    company_changed: "Daten der Einrichtung geändert", plan_chosen: "Tarif bestellt",
+    btm_enabled: "BtM-Buch aktiviert", btm_disabled: "BtM-Buch deaktiviert", btm_item_archived: "BtM-Präparat archiviert", btm_corrected: "BtM-Eintrag storniert"
   };
   var AUDIT_FIELDS = { name: "Name", inv_prefix: "Präfix", billing: "Rechnungsadresse", settings: "Einstellungen" };
   function auditDetail(e) {
@@ -1232,6 +1243,9 @@
       case "member_invited": return (d.email || "") + " · " + roleLabel(d.role) + (d.existing_account ? " · vorhandenes Konto" : "");
       case "member_changed": return (d.email || "") + (d.role ? " · Rolle: " + roleLabel(d.role) : "") + (d.active != null ? " · " + (d.active ? "aktiviert" : "deaktiviert") : "");
       case "member_removed": return d.email || "";
+      case "btm_enabled": case "btm_disabled": return "";
+      case "btm_item_archived": return d.name || "";
+      case "btm_corrected": { var bi = S.btmItems.get(d.item_id); return bi ? bi.name : "Präparat"; }
       case "company_changed": return (Array.isArray(d.fields) ? d.fields.map(function (f) { return AUDIT_FIELDS[f] || f; }).join(", ") : "") + (d.name ? " · " + d.name : "");
       case "plan_chosen": return (PLANS[d.plan] ? PLANS[d.plan].label : (d.plan || "")) + (d.period ? " · " + (d.period === "jahr" ? "jährlich" : "monatlich") : "") + (d.invoice ? " · Rechnung " + d.invoice : "");
     }
@@ -1377,7 +1391,7 @@
     var v = formVals(f), btn = $("button[type=submit]", f), days = parseInt(v.due_days, 10);
     if (!(days >= 1 && days <= 180)) { toast("Die Vorwarnzeit muss zwischen 1 und 180 Tagen liegen.", "warn"); return; }
     if (v.due_mail_to && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.due_mail_to)) { toast(errMsg("bad_email"), "warn"); return; }
-    saveCompany({ settings: { site: String(v.site || "").slice(0, 120), due_mail: !!v.due_mail, due_mail_to: v.due_mail_to || "", due_days: days } }, "Einstellungen gespeichert.", btn);
+    saveCompany({ settings: { site: String(v.site || "").slice(0, 120), due_mail: !!v.due_mail, due_mail_to: v.due_mail_to || "", due_days: days, btm: !!v.btm } }, "Einstellungen gespeichert.", btn);
   };
 
   function renderPlans() {
@@ -1470,6 +1484,8 @@
         fld("Vorwarnzeit für Fristen (Tage)", "due_days", s.due_days || 30, 'type="number" min="1" max="180" inputmode="numeric"') +
         '<label class="check"><input type="checkbox" name="due_mail"' + (s.due_mail ? " checked" : "") + '> Fällige Prüffristen wöchentlich per E-Mail melden</label>' +
         fld("Empfänger der Fristen-E-Mail", "due_mail_to", s.due_mail_to, 'type="email" maxlength="200"', "Leer = Kontakt-E-Mail der Einrichtung.") +
+        '<label class="check"><input type="checkbox" name="btm"' + (s.btm ? " checked" : "") + '> Modul „BtM-Buch“ (Betäubungsmittel-Nachweis) verwenden</label>' +
+        '<div class="hint">Im BtM-Buch können bei Abgängen Namen von Patientinnen und Patienten stehen. Das sind Gesundheitsdaten – bitte schließen Sie vor der Nutzung einen Vertrag zur Auftragsverarbeitung mit uns (kontakt@vaydena.de). Beim Abschalten bleiben vorhandene Einträge gespeichert.</div>' +
         '<div class="btnrow"><button class="btn primary sm" type="submit">Speichern</button></div></form></div>' +
         '<div class="card"><h2>Daten exportieren</h2><p class="help">Ihre Daten gehören Ihnen. Das Medizinproduktebuch ist nach Außerbetriebnahme eines Geräts noch fünf Jahre aufzubewahren (§ 13 MPBetreibV) – sichern Sie es vor einer Kündigung.</p>' +
         '<div class="btnrow"><button class="btn ghost sm" type="button" data-act="devices-csv">' + ic("download") + ' Bestandsverzeichnis (CSV)</button>' +
@@ -1491,10 +1507,10 @@
     });
   };
 
-  var KIND_LABEL = { location: "Standort", person: "Person", device: "Gerät" };
+  var KIND_LABEL = { location: "Standort", person: "Person", device: "Gerät", btm_item: "BtM-Präparat" };
   function conflictRow(o) {
     var rec = MPStore.mapOf(o.kind).get(o.id) || {};
-    var href = o.kind === "device" ? "#geraete/" + encodeURIComponent(o.id) : o.kind === "person" ? "#personen" : "#standorte";
+    var href = o.kind === "device" ? "#geraete/" + encodeURIComponent(o.id) : o.kind === "person" ? "#personen" : o.kind === "btm_item" ? "#btm/" + encodeURIComponent(o.id) : "#standorte";
     return '<div class="row"><div class="ic grey">' + ic("warn") + '</div><div class="txt"><div class="t">' + esc(KIND_LABEL[o.kind] || o.kind) + ': ' + esc(rec.name || "–") + '</div>' +
       '<div class="s errtxt">' + esc(errMsg(o.error)) + (o.error_at ? ' · ' + esc(relTime(o.error_at)) : "") + '</div></div><div class="acts">' +
       (rec.deleted ? "" : '<a class="btn ghost sm" href="' + href + '">Bearbeiten</a>') +
@@ -1502,11 +1518,15 @@
       '<button class="btn ghost sm danger" type="button" data-act="conflict-drop" data-kind="' + o.kind + '" data-id="' + esc(o.id) + '">Verwerfen</button></div></div>';
   }
   function failedHtml() {
-    if (!S.failed.length) return "";
+    if (!S.failed.length && !S.btmFailed.length) return "";
     return '<h3>Abgelehnte Einträge</h3><p class="help">Diese Einträge hat der Server nicht angenommen. Sie stehen nicht im Medizinproduktebuch – bitte prüfen und bei Bedarf neu erfassen.</p><div class="list">' +
       S.failed.map(function (e) {
         var d = S.devices.get(e.device_id);
         return '<div class="row"><div class="ic grey">' + ic("warn") + '</div><div class="txt"><div class="t">' + esc(TYPE_SHORT[e.type] || e.type) + ' vom ' + esc(fmtBB(e.date)) + ' · ' + esc(d ? d.inv_no + " " + d.name : "Gerät") + '</div>' +
+          '<div class="s errtxt">' + esc(errMsg(e.error)) + (e.failed_at ? ' · ' + esc(relTime(e.failed_at)) : "") + '</div></div></div>';
+      }).join("") + S.btmFailed.map(function (e) {
+        var bi = S.btmItems.get(e.item_id);
+        return '<div class="row"><div class="ic grey">' + ic("warn") + '</div><div class="txt"><div class="t">BtM-Buch: ' + (e.what === "check" ? "Monatsprüfung " + esc(e.month || "") : (e.kind === "zugang" ? "Zugang" : "Abgang") + " vom " + esc(fmtBB(e.date))) + ' · ' + esc(bi ? bi.name : "Präparat") + '</div>' +
           '<div class="s errtxt">' + esc(errMsg(e.error)) + (e.failed_at ? ' · ' + esc(relTime(e.failed_at)) : "") + '</div></div></div>';
       }).join("") + '</div><div class="btnrow"><button class="btn ghost sm" type="button" data-act="failed-clear">Liste leeren</button></div>';
   }
@@ -1616,6 +1636,240 @@
       if (!yes) return;
       MPStore.clearAll().then(function () { return MP.signOut(); }).then(function () { location.href = "anmelden.html"; }).catch(function () { location.href = "anmelden.html"; });
     });
+  };
+
+  // =====================================================================
+  // BtM-Buch (Betäubungsmittel-Nachweis) – zuschaltbares Modul
+  // =====================================================================
+  var BTM_UNITS = ["Stück", "ml", "mg", "g", "µg"];
+  var NOTE_BTM = '<p class="help">Das BtM-Buch dokumentiert Ihre Angaben und errechnet daraus den Bestand. Ob diese Form des Nachweises den für Sie geltenden Vorgaben entspricht (BtMVV §§ 13, 14, amtliches Formblatt), klären Sie bitte mit Ihrer zuständigen Behörde. Ein Ausdruck ist jederzeit möglich.</p>';
+  function btmOn() { return !!settings().btm; }
+  function q3(n) { return String(MPStore.round3(Number(n) || 0)).replace(".", ","); }
+  function parseQty(s) {
+    s = String(s == null ? "" : s).trim().replace(",", ".");
+    if (!/^\d{1,10}(\.\d{1,3})?$/.test(s)) return null;
+    var n = Number(s); return n > 0 ? n : null;
+  }
+  function btmSub(i) { return [i.form, i.storage].filter(Boolean).join(" · "); }
+  function btmBlocked() {
+    if (st().subInactive) { toast(errMsg("subscription_inactive"), "warn", 4500); return true; }
+    return false;
+  }
+  function btmListHtml() {
+    var arch = !!App.f.btm.arch, list = MPStore.btmItemsList(arch), nArch = MPStore.btmItemsList(true).length;
+    var h = '<div class="ph"><h1>BtM-Buch</h1><div class="spacer"></div>' +
+      (isAdmin() && !arch ? '<button class="btn primary sm" type="button" data-act="btm-item-new">' + ic("plus") + ' Präparat</button>' : "") +
+      '<div class="sub">Nachweis über Zugänge, Abgänge und Bestand – je Betäubungsmittel eine Karteikarte.</div></div>';
+    if (nArch || arch) h += '<div class="seg"><button type="button" data-act="btm-arch" data-v="0"' + (arch ? "" : ' class="on"') + '>Aktiv</button><button type="button" data-act="btm-arch" data-v="1"' + (arch ? ' class="on"' : "") + '>Archiviert (' + nArch + ')</button></div>';
+    h += '<div class="list">' + (list.length ? list.map(function (i) {
+      var conflict = S.outbox.some(function (o) { return o.kind === "btm_item" && o.id === i.id && o.error; });
+      return '<a class="row" href="#btm/' + encodeURIComponent(i.id) + '"><div class="ic' + (arch ? " grey" : "") + '">' + ic("clipboard") + '</div><div class="txt"><div class="t">' + esc(i.name) + '</div>' +
+        '<div class="s">' + esc(btmSub(i) || "–") + (conflict ? ' · <span class="errtxt">vom Server abgelehnt</span>' : "") + '</div></div>' +
+        '<span class="pill ' + (arch ? "grey" : "teal") + '">' + esc(q3(MPStore.btmStock(i.id))) + ' ' + esc(i.unit || "") + '</span>' + ic("chev") + '</a>';
+    }).join("") : '<div class="empty">' + (arch ? "Keine archivierten Präparate." : isAdmin() ? "Noch kein Präparat angelegt." : "Noch kein Präparat angelegt. Präparate legt die Administration an.") + '</div>') + '</div>';
+    return h + NOTE_BTM;
+  }
+  function btmRowLabel(e) { return e.corrects ? "Storno" : (e.kind === "zugang" ? "Zugang" : "Abgang"); }
+  function btmCardHtml(i) {
+    var card = MPStore.btmCard(i.id), checks = MPStore.btmChecksOf(i.id), stock = MPStore.btmStock(i.id), admin = isAdmin(), unit = esc(i.unit || "");
+    var h = '<div class="ph"><a class="iconbtn" href="#btm" aria-label="Zurück">' + ic("back") + '</a><h1>' + esc(i.name) + '</h1>' +
+      '<div class="sub">' + esc([btmSub(i), "Einheit: " + (i.unit || "")].filter(Boolean).join(" · ")) + (i.deleted ? ' · <span class="pill grey">archiviert</span>' : "") + '</div></div>' +
+      '<div class="kpis"><div class="kpi"><b>' + esc(q3(stock)) + ' ' + unit + '</b><span>Bestand laut Buch</span></div>' +
+      '<div class="kpi"><b>' + (checks.length ? esc(fmtBB(checks[0].check_date)) : "–") + '</b><span>Letzte Monatsprüfung</span></div></div>' +
+      '<div class="btnrow top">' +
+      (i.deleted ? "" : '<button class="btn primary sm" type="button" data-act="btm-entry-new" data-id="' + esc(i.id) + '" data-kind="zugang">' + ic("plus") + ' Zugang</button>' +
+        '<button class="btn primary sm" type="button" data-act="btm-entry-new" data-id="' + esc(i.id) + '" data-kind="abgang">' + ic("out") + ' Abgang</button>' +
+        '<button class="btn ghost sm" type="button" data-act="btm-check-new" data-id="' + esc(i.id) + '">' + ic("check") + ' Monatsprüfung</button>') +
+      '<button class="btn ghost sm" type="button" data-act="btm-print" data-id="' + esc(i.id) + '">' + ic("print") + ' Drucken</button>' +
+      '<button class="btn ghost sm" type="button" data-act="btm-csv" data-id="' + esc(i.id) + '">' + ic("download") + ' CSV</button>' +
+      (admin && !i.deleted ? '<button class="btn ghost sm" type="button" data-act="btm-item-edit" data-id="' + esc(i.id) + '">' + ic("edit") + ' Bearbeiten</button>' +
+        '<button class="btn ghost sm danger" type="button" data-act="btm-item-archive" data-id="' + esc(i.id) + '">' + ic("trash") + ' Archivieren</button>' : "") + '</div>';
+    if (i.note) h += '<p class="note">' + esc(i.note) + '</p>';
+    h += '<div class="sh"><h2>Zu- und Abgänge</h2></div>';
+    if (!card.length) h += '<div class="empty">Noch keine Einträge.</div>';
+    else {
+      h += '<div class="tblwrap"><table class="tbl"><thead><tr><th>Datum</th><th class="num">Zugang</th><th class="num">Abgang</th><th class="num">Bestand</th><th>Lieferer / Empfänger</th><th>Arzt</th><th>Beleg-Nr.</th><th>Erfasst</th><th></th></tr></thead><tbody>';
+      card.slice().reverse().forEach(function (r) {
+        var e = r.e, corr = MPStore.btmCorrectionOf(e.id), q = esc(q3(e.qty));
+        h += '<tr' + (e.pending ? ' class="diff"' : "") + '><td>' + esc(fmtBB(e.date)) + (e.corrects ? '<div class="s muted">Storno</div>' : "") + (corr ? '<div class="s muted">storniert</div>' : "") + '</td>' +
+          '<td class="num">' + (e.kind === "zugang" ? q : "") + '</td><td class="num">' + (e.kind === "abgang" ? q : "") + '</td><td class="num"><b>' + esc(q3(r.bal)) + '</b></td>' +
+          '<td>' + esc(e.party || "") + (e.note ? '<div class="s muted">' + esc(e.note) + '</div>' : "") + '</td><td>' + esc(e.doctor || "") + '</td><td class="mono">' + esc(e.doc_no || "") + '</td>' +
+          '<td>' + esc(e.member_name || nameOfMember(e.member_id)) + '<div class="s muted">' + (e.pending ? "noch nicht übertragen" : esc(fmtDate(e.created_at))) + '</div></td>' +
+          '<td class="act">' + (!e.corrects && !corr ? '<button class="btn ghost xs" type="button" data-act="btm-storno" data-id="' + esc(e.id) + '">Stornieren</button>' : "") + '</td></tr>';
+      });
+      h += '</tbody></table></div><p class="help">Einträge werden nicht geändert oder gelöscht. Ein Fehler wird durch eine Storno-Buchung ausgeglichen; der ursprüngliche Eintrag bleibt lesbar.</p>';
+    }
+    h += '<div class="sh"><h2>Monatsprüfungen</h2></div>';
+    h += checks.length ? '<div class="list">' + checks.map(function (c) {
+      return '<div class="row' + (c.pending ? " pending" : "") + '"><div class="ic grey">' + ic("check") + '</div><div class="txt"><div class="t">' + esc(monthLabel(c.month)) + ' · Bestand ' + esc(q3(c.balance)) + ' ' + unit + '</div>' +
+        '<div class="s">geprüft am ' + esc(fmtBB(c.check_date)) + ' von ' + esc(c.checker || "") + (c.note ? ' · ' + esc(c.note) : "") + (c.pending ? ' · noch nicht übertragen' : "") + '</div></div></div>';
+    }).join("") + '</div>' : '<div class="empty">Noch keine Monatsprüfung eingetragen.</div>';
+    return h + NOTE_BTM;
+  }
+  function monthLabel(m) {
+    var x = /^(\d{4})-(\d{2})$/.exec(m || ""); if (!x) return m || "";
+    return ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"][Number(x[2]) - 1] + " " + x[1];
+  }
+  VIEWS.btm = {
+    title: function (arg) { var i = arg && S.btmItems.get(arg); return i ? i.name : "BtM-Buch"; },
+    render: function (arg) {
+      if (!btmOn()) return '<div class="card warn">Das Modul „BtM-Buch“ ist nicht aktiviert.</div>';
+      if (arg) { var i = S.btmItems.get(arg); return i ? btmCardHtml(i) : '<div class="card warn">Dieses Präparat wurde nicht gefunden.</div><p><a class="btn ghost sm" href="#btm">Zur Übersicht</a></p>'; }
+      return btmListHtml();
+    }
+  };
+  ACTIONS["btm-arch"] = function (el) { App.f.btm.arch = el.getAttribute("data-v") === "1"; renderView(); };
+
+  // ---- Präparat anlegen / bearbeiten / archivieren (Admin) ----
+  function btmItemForm(i) {
+    var isNew = !i; i = i || { unit: "Stück" };
+    var fixed = !isNew && MPStore.btmCard(i.id).length > 0;
+    modal({ title: isNew ? "Präparat anlegen" : "Präparat bearbeiten", body:
+      '<form data-form="btm-item" data-id="' + esc(i.id || "") + '">' +
+      fld("Bezeichnung des Betäubungsmittels *", "name", i.name, 'maxlength="200" required', "So, wie es im Nachweis stehen soll.") +
+      fld("Darreichungsform / Stärke", "form", i.form, 'maxlength="200" placeholder="z. B. Ampullen 10 mg/ml, 1 ml"') +
+      '<div class="field"><label>Einheit des Bestands</label><select name="unit"' + (fixed ? " disabled" : "") + '>' +
+      BTM_UNITS.map(function (u) { return '<option' + (u === i.unit ? " selected" : "") + '>' + esc(u) + '</option>'; }).join("") + '</select>' +
+      '<div class="hint">' + (fixed ? "Nach der ersten Buchung nicht mehr änderbar." : "In dieser Einheit werden Zugänge, Abgänge und Bestand geführt.") + '</div></div>' +
+      fld("Aufbewahrungsort", "storage", i.storage, 'maxlength="200" placeholder="z. B. BtM-Schrank Raum 2"') +
+      '<div class="field"><label>Bemerkung</label><textarea name="note" rows="2" maxlength="1000">' + esc(i.note || "") + '</textarea></div>' +
+      '<div class="btnrow"><button class="btn primary" type="submit">Speichern</button><button class="btn ghost" type="button" data-act="modal-close">Abbrechen</button></div></form>' });
+  }
+  ACTIONS["btm-item-new"] = function () { if (!isAdmin() || btmBlocked()) return; btmItemForm(null); };
+  ACTIONS["btm-item-edit"] = function (el) { var i = S.btmItems.get(el.getAttribute("data-id")); if (!i || !isAdmin() || btmBlocked()) return; btmItemForm(i); };
+  FORMS["btm-item"] = function (f) {
+    var v = formVals(f), id = f.getAttribute("data-id"), old = id ? S.btmItems.get(id) : null;
+    if (!v.name) { toast(errMsg("name_required"), "warn"); return; }
+    var rec = Object.assign({}, old || { id: MPStore.uuid() }, { name: v.name.slice(0, 200), form: v.form || null, storage: v.storage || null, note: v.note || null });
+    if (!old || !MPStore.btmCard(old.id).length) rec.unit = BTM_UNITS.indexOf(v.unit) >= 0 ? v.unit : "Stück";
+    MPStore.upsertBtmItem(rec).then(function () {
+      MPSync.schedule(300); closeModal(); toast("Präparat gespeichert.", "ok");
+      if (!old) nav("btm/" + encodeURIComponent(rec.id)); else renderView();
+    });
+  };
+  ACTIONS["btm-item-archive"] = function (el) {
+    var i = S.btmItems.get(el.getAttribute("data-id")); if (!i || !isAdmin() || btmBlocked()) return;
+    if (MPStore.btmStock(i.id) !== 0) { toast(errMsg("btm_has_stock"), "warn", 4500); return; }
+    confirmDlg("„" + i.name + "“ archivieren? Die Karteikarte bleibt lesbar und druckbar, neue Einträge sind dann nicht mehr möglich.", { title: "Präparat archivieren", ok: "Archivieren", danger: true }).then(function (yes) {
+      if (!yes) return;
+      MPStore.upsertBtmItem(Object.assign({}, i, { deleted: true })).then(function () { MPSync.schedule(300); toast("Präparat archiviert."); nav("btm"); });
+    });
+  };
+
+  // ---- Zugang / Abgang ----
+  ACTIONS["btm-entry-new"] = function (el) {
+    var i = S.btmItems.get(el.getAttribute("data-id")), kind = el.getAttribute("data-kind") === "zugang" ? "zugang" : "abgang";
+    if (!i || i.deleted || btmBlocked()) return;
+    var zu = kind === "zugang", stock = MPStore.btmStock(i.id);
+    modal({ title: zu ? "Zugang eintragen" : "Abgang eintragen", body:
+      '<form data-form="btm-entry" data-item="' + esc(i.id) + '" data-kind="' + kind + '">' +
+      '<p class="muted" style="margin-top:0">' + esc(i.name) + (btmSub(i) ? ' · ' + esc(btmSub(i)) : "") + ' · Bestand ' + esc(q3(stock)) + ' ' + esc(i.unit || "") + '</p>' +
+      '<div class="f2">' + fld("Datum *", "date", todayIso(), 'type="date" required max="' + todayIso() + '"') +
+      fld("Menge (" + esc(i.unit || "") + ") *", "qty", "", 'inputmode="decimal" required autocomplete="off" maxlength="15"') + '</div>' +
+      fld(zu ? "Lieferer / Herkunft *" : "Empfänger / Verbleib *", "party", "", 'maxlength="400" required',
+        zu ? "Name und Anschrift des Lieferers bzw. sonstige Herkunft." : "Name und Anschrift des Empfängers bzw. sonstiger Verbleib (z. B. Patient, Vernichtung).") +
+      '<div class="f2">' + fld(zu ? "Arzt (bei Bezug auf Verschreibung)" : "Verschreibender Arzt", "doctor", "", 'maxlength="200"') +
+      fld("Beleg-Nr.", "doc_no", "", 'maxlength="80" class="mono"', "BtM-Rezept, Anforderungsschein oder Lieferschein.") + '</div>' +
+      '<div class="field"><label>Bemerkung</label><textarea name="note" rows="2" maxlength="1000"></textarea></div>' +
+      '<div class="btnrow"><button class="btn primary" type="submit">Eintrag speichern</button><button class="btn ghost" type="button" data-act="modal-close">Abbrechen</button></div></form>' });
+  };
+  function btmEntryRec(itemId, kind, date, qty, more) {
+    return Object.assign({ id: MPStore.uuid(), item_id: itemId, kind: kind, date: date, qty: qty, party: null, doctor: null, doc_no: null, note: null, corrects: null,
+      created_at: MPStore.nowIso(), member_id: S.member ? S.member.id : null, member_name: S.member ? S.member.name : "" }, more || {});
+  }
+  FORMS["btm-entry"] = function (f) {
+    var v = formVals(f), i = S.btmItems.get(f.getAttribute("data-item")), kind = f.getAttribute("data-kind");
+    if (!i || i.deleted) { toast(errMsg("btm_item_archived"), "warn"); return; }
+    if (btmBlocked()) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.date || "")) { toast("Bitte ein Datum angeben.", "warn"); return; }
+    if (v.date > todayIso()) { toast(errMsg("bad_date"), "warn"); return; }
+    var qty = parseQty(v.qty);
+    if (qty == null) { toast(errMsg("btm_bad_qty"), "warn"); return; }
+    if (!v.party) { toast(kind === "zugang" ? "Bitte Lieferer bzw. Herkunft angeben." : "Bitte Empfänger bzw. Verbleib angeben.", "warn"); return; }
+    if (kind === "abgang" && MPStore.round3(MPStore.btmStock(i.id) - qty) < 0) { toast(errMsg("btm_negative"), "warn", 4500); return; }
+    MPStore.addBtmPending("entry", btmEntryRec(i.id, kind, v.date, qty, { party: v.party, doctor: v.doctor || null, doc_no: v.doc_no || null, note: v.note || null })).then(function () {
+      MPSync.schedule(300); closeModal(); toast((kind === "zugang" ? "Zugang" : "Abgang") + " gespeichert.", "ok"); renderView();
+    });
+  };
+  ACTIONS["btm-storno"] = function (el) {
+    var e = MPStore.getBtmEntry(el.getAttribute("data-id")); if (!e || e.corrects || MPStore.btmCorrectionOf(e.id) || btmBlocked()) return;
+    var i = S.btmItems.get(e.item_id), back = e.kind === "zugang" ? "abgang" : "zugang";
+    if (back === "abgang" && MPStore.round3(MPStore.btmStock(e.item_id) - Number(e.qty)) < 0) { toast("Stornieren nicht möglich: Der Bestand würde negativ. " + errMsg("btm_negative"), "warn", 5000); return; }
+    confirmDlg((e.kind === "zugang" ? "Zugang" : "Abgang") + " vom " + fmtBB(e.date) + " über " + q3(e.qty) + " " + (i ? i.unit : "") + " stornieren? Es wird eine Gegenbuchung eingetragen; der ursprüngliche Eintrag bleibt lesbar.",
+      { title: "Eintrag stornieren", ok: "Stornieren", danger: true }).then(function (yes) {
+      if (!yes) return;
+      MPStore.addBtmPending("entry", btmEntryRec(e.item_id, back, todayIso(), Number(e.qty), { party: "Storno des Eintrags vom " + fmtBB(e.date), corrects: e.id })).then(function () {
+        MPSync.schedule(300); toast("Storno eingetragen.", "ok"); renderView();
+      });
+    });
+  };
+
+  // ---- Monatsprüfung ----
+  ACTIONS["btm-check-new"] = function (el) {
+    var i = S.btmItems.get(el.getAttribute("data-id")); if (!i || i.deleted || btmBlocked()) return;
+    var t = todayIso();
+    modal({ title: "Monatsprüfung eintragen", body:
+      '<form data-form="btm-check" data-item="' + esc(i.id) + '">' +
+      '<p class="muted" style="margin-top:0">' + esc(i.name) + ' · Bestand laut Buch ' + esc(q3(MPStore.btmStock(i.id))) + ' ' + esc(i.unit || "") + '</p>' +
+      '<div class="f2">' + fld("Geprüfter Monat *", "month", t.slice(0, 7), 'type="month" required max="' + t.slice(0, 7) + '"') +
+      fld("Prüfdatum *", "check_date", t, 'type="date" required max="' + t + '"') + '</div>' +
+      fld("Geprüft von *", "checker", S.member ? S.member.name : "", 'maxlength="200" required', "Name der verantwortlichen Person, die Eintragungen und Bestand geprüft hat.") +
+      fld("Festgestellter Bestand (" + esc(i.unit || "") + ") *", "balance", q3(MPStore.btmStock(i.id)), 'inputmode="decimal" required autocomplete="off" maxlength="15"') +
+      '<div class="field"><label>Bemerkung</label><textarea name="note" rows="2" maxlength="1000"></textarea></div>' +
+      '<p class="help">Hier halten Sie fest, dass geprüft wurde. Namenszeichen und Prüfdatum auf dem Ausdruck bringt die prüfende Person selbst an.</p>' +
+      '<div class="btnrow"><button class="btn primary" type="submit">Prüfung speichern</button><button class="btn ghost" type="button" data-act="modal-close">Abbrechen</button></div></form>' });
+  };
+  FORMS["btm-check"] = function (f) {
+    var v = formVals(f), i = S.btmItems.get(f.getAttribute("data-item")); if (!i || btmBlocked()) return;
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(v.month || "") || v.month > todayIso().slice(0, 7)) { toast("Bitte einen gültigen Monat angeben (JJJJ-MM, nicht in der Zukunft).", "warn"); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.check_date || "") || v.check_date > todayIso()) { toast(errMsg("bad_date"), "warn"); return; }
+    if (!v.checker) { toast("Bitte angeben, wer geprüft hat.", "warn"); return; }
+    var bs = String(v.balance || "").replace(",", ".");
+    if (!/^\d{1,10}(\.\d{1,3})?$/.test(bs)) { toast("Bitte den festgestellten Bestand angeben (höchstens drei Nachkommastellen).", "warn"); return; }
+    var bal = Number(bs), stock = MPStore.btmStock(i.id);
+    var go = bal === stock ? Promise.resolve(true) : confirmDlg("Der festgestellte Bestand (" + q3(bal) + " " + i.unit + ") weicht vom Bestand laut Buch (" + q3(stock) + " " + i.unit + ") ab. Die Prüfung trotzdem so speichern?", { title: "Abweichung", ok: "Speichern" });
+    // confirmDlg ersetzt das Formular-Modal – die Werte sind bereits ausgelesen
+    go.then(function (yes) {
+      if (!yes) return;
+      return MPStore.addBtmPending("check", { id: MPStore.uuid(), item_id: i.id, month: v.month, checker: v.checker.slice(0, 200), check_date: v.check_date, balance: bal, note: v.note || null,
+        created_at: MPStore.nowIso(), member_id: S.member ? S.member.id : null, member_name: S.member ? S.member.name : "" }).then(function () {
+        MPSync.schedule(300); closeModal(); toast("Monatsprüfung gespeichert.", "ok"); renderView();
+      });
+    });
+  };
+
+  // ---- Ausdruck und CSV je Präparat ----
+  ACTIONS["btm-print"] = function (el) {
+    var i = S.btmItems.get(el.getAttribute("data-id")); if (!i) return;
+    var card = MPStore.btmCard(i.id), checks = MPStore.btmChecksOf(i.id).slice().reverse();
+    var h = '<div class="pr-doc"><h1>Betäubungsmittel-Nachweis</h1><p class="pr-sub">' + esc(S.tenant ? S.tenant.name : "") + (settings().site ? ' · ' + esc(settings().site) : "") + ' · Ausdruck vom ' + esc(fmtBB(todayIso())) + '</p>' +
+      '<table class="pr-kv">' + [["Bezeichnung des Betäubungsmittels", i.name], ["Darreichungsform / Stärke", i.form], ["Einheit", i.unit], ["Aufbewahrungsort", i.storage], ["Status", i.deleted ? "archiviert" : ""]]
+        .filter(function (r) { return r[1]; }).map(function (r) { return '<tr><th>' + r[0] + '</th><td>' + esc(r[1]) + '</td></tr>'; }).join("") + '</table>' +
+      '<table class="pr-tbl"><thead><tr><th>Lfd. Nr.</th><th>Datum</th><th>Zugang</th><th>Abgang</th><th>Bestand</th><th>Lieferer bzw. Empfänger / Herkunft bzw. Verbleib</th><th>Arzt</th><th>Beleg-Nr.</th><th>Erfasst</th></tr></thead><tbody>';
+    card.forEach(function (r, n) {
+      var e = r.e, corr = MPStore.btmCorrectionOf(e.id);
+      h += '<tr><td>' + (n + 1) + '</td><td>' + esc(fmtBB(e.date)) + '</td><td>' + (e.kind === "zugang" ? esc(q3(e.qty)) : "") + '</td><td>' + (e.kind === "abgang" ? esc(q3(e.qty)) : "") + '</td><td>' + esc(q3(r.bal)) + '</td><td>' +
+        esc([e.party, e.note].filter(Boolean).join(" · ")) + (corr ? "<br>(storniert)" : "") + '</td><td>' + esc(e.doctor || "") + '</td><td>' + esc(e.doc_no || "") + '</td><td>' +
+        esc(e.member_name || nameOfMember(e.member_id)) + (e.created_at ? "<br>" + esc(fmtDate(e.created_at)) : "") + (e.pending ? "<br>(nicht übertragen)" : "") + '</td></tr>';
+    });
+    if (!card.length) h += '<tr><td colspan="9">Keine Einträge.</td></tr>';
+    h += '</tbody></table><p class="pr-sub" style="margin-top:6mm"><b>Monatsprüfungen</b></p>' +
+      '<table class="pr-tbl"><thead><tr><th>Monat</th><th>Prüfdatum</th><th>Festgestellter Bestand</th><th>Geprüft von</th><th>Bemerkung</th><th style="width:38mm">Namenszeichen</th></tr></thead><tbody>';
+    checks.forEach(function (c) {
+      h += '<tr><td>' + esc(monthLabel(c.month)) + '</td><td>' + esc(fmtBB(c.check_date)) + '</td><td>' + esc(q3(c.balance)) + ' ' + esc(i.unit || "") + '</td><td>' + esc(c.checker || "") + '</td><td>' + esc(c.note || "") + (c.pending ? " (nicht übertragen)" : "") + '</td><td>&nbsp;</td></tr>';
+    });
+    h += '<tr><td>&nbsp;<br>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div>';
+    printHtml(h);
+  };
+  ACTIONS["btm-csv"] = function (el) {
+    var i = S.btmItems.get(el.getAttribute("data-id")); if (!i) return;
+    var rows = [["Lfd. Nr.", "Datum", "Art", "Zugang", "Abgang", "Bestand", "Einheit", "Lieferer / Empfänger", "Arzt", "Beleg-Nr.", "Bemerkung", "Storniert", "Erfasst von", "Erfasst am"]];
+    MPStore.btmCard(i.id).forEach(function (r, n) {
+      var e = r.e;
+      rows.push([n + 1, fmtBB(e.date), btmRowLabel(e), e.kind === "zugang" ? q3(e.qty) : "", e.kind === "abgang" ? q3(e.qty) : "", q3(r.bal), i.unit || "", e.party || "", e.doctor || "", e.doc_no || "", e.note || "",
+        MPStore.btmCorrectionOf(e.id) ? "ja" : "", e.member_name || nameOfMember(e.member_id), e.pending ? "nicht übertragen" : fmtDate(e.created_at)]);
+    });
+    download("btm-" + String(i.name).replace(/[^\w-]+/g, "_").slice(0, 40) + "-" + fileDate() + ".csv", csvText(rows));
   };
 
   window.MPApp = { toast: toast, nav: nav, App: App, version: APP_VERSION };

@@ -41,19 +41,21 @@ const SESSION = { access_token: b64({ alg: "HS256", typ: "JWT" }) + "." + b64({ 
 const trialEnd = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
 const TENANT = { id: "00000000-0000-4000-8000-0000000000aa", name: "Testpraxis", plan: "trial", plan_label: "Test", status: "aktiv",
   trial_ends_at: trialEnd, trial_ends_dmy: trialEnd.split("-").reverse().join("."), paid_until: null, paid_until_dmy: null,
-  billing: {}, inv_prefix: "MP", settings: {}, contact_email: USER.email, limits: { users: null, devices: 1000 },
+  billing: {}, inv_prefix: "MP", settings: { btm: true }, contact_email: USER.email, limits: { users: null, devices: 1000 },
   sub: { active: true, reason: null, days_left: 14, until: trialEnd } };
 const ME = { id: "00000000-0000-4000-8000-0000000000bb", role: "admin", name: "Test Admin", email: USER.email };
-const pushed = { locations: 0, persons: 0, devices: 0, entries: 0 };
+const pushed = { locations: 0, persons: 0, devices: 0, entries: 0, btm_items: 0, btm_entries: 0, btm_checks: 0 };
+const pushedBodies = [];
 const unknown = new Set();
 
 function mockApi(body) {
   const now = new Date().toISOString();
   const a = body.action;
   if (a === "pull") return { ok: true, server_time: now, full: !body.since, more: false, tenant: TENANT, member: ME,
-    locations: [], persons: [], devices: [], entries: [], members: [Object.assign({ active: true }, ME)] };
+    locations: [], persons: [], devices: [], entries: [], btm_items: [], btm_entries: [], btm_checks: [], members: [Object.assign({ active: true }, ME)] };
   if (a === "push") {
     const res = {};
+    (body.btm_entries || []).forEach((x) => pushedBodies.push(x));
     for (const k of Object.keys(pushed)) { res[k] = (body[k] || []).map((x) => ({ id: x.id, ok: true })); pushed[k] += res[k].length; }
     return { ok: true, results: res, server_time: now };
   }
@@ -172,8 +174,68 @@ function mockApi(body) {
     check(pushed.entries >= 1, "Eintrag wurde an die Attrappe übertragen (" + pushed.entries + ")");
   }
 
+  // BtM-Buch: Präparat, Zugang, Abgang, Überziehung, Storno, Monatsprüfung
+  {
+    const before = errors.length;
+    const view = () => page.evaluate(() => document.querySelector("#view").innerText);
+    const setv = (form, vals) => page.evaluate((form, vals) => { const f = document.querySelector('form[data-form="' + form + '"]'); Object.keys(vals).forEach((k) => { f.elements[k].value = vals[k]; }); }, form, vals);
+    const submit = async (form) => { await page.click('form[data-form="' + form + '"] button[type="submit"]'); await wait(700); };
+    await page.evaluate(() => { location.hash = "#btm"; });
+    await wait(800);
+    check(/BtM-Buch/.test(await view()) && !!(await page.$('[data-act="btm-item-new"]')), "BtM-Buch erscheint (Modul aktiv)");
+    await page.click('[data-act="btm-item-new"]');
+    await page.waitForSelector('form[data-form="btm-item"]', { timeout: 5000 }).catch(() => {});
+    await setv("btm-item", { name: "Fentanyl Test", form: "Ampullen 0,1 mg/2 ml", unit: "Stück", storage: "BtM-Schrank" });
+    await submit("btm-item");
+    check(/#btm\/.+/.test(page.url()) && /Fentanyl Test/.test(await view()), "Präparat angelegt, Karteikarte geöffnet");
+    await page.click('[data-act="btm-entry-new"][data-kind="zugang"]');
+    await page.waitForSelector('form[data-form="btm-entry"]', { timeout: 5000 }).catch(() => {});
+    await shot(page, "app-btm-zugang");
+    await setv("btm-entry", { qty: "10", party: "Muster-Apotheke, Beispielweg 1", doc_no: "L-123" });
+    await submit("btm-entry");
+    await page.click('[data-act="btm-entry-new"][data-kind="abgang"]');
+    await setv("btm-entry", { qty: "2,5", party: "Testperson A", doctor: "Dr. Test" });
+    await submit("btm-entry");
+    const stock = () => page.evaluate(() => MPStore.btmStock(Array.from(MPStore.S.btmItems.keys())[0]));
+    check((await stock()) === 7.5, "Bestand nach Zugang 10 und Abgang 2,5 = 7,5 (" + (await stock()) + ")");
+    await page.click('[data-act="btm-entry-new"][data-kind="abgang"]');
+    await setv("btm-entry", { qty: "99", party: "Testperson B" });
+    await submit("btm-entry");
+    check((await stock()) === 7.5 && !!(await page.$('form[data-form="btm-entry"]')), "Abgang über Bestand wird abgelehnt");
+    await page.click('[data-act="modal-close"]');
+    await wait(300);
+    // Storno des Abgangs (oberste Zeile = neuester Eintrag)
+    await page.click('[data-act="btm-storno"]');
+    await wait(400);
+    await page.evaluate(() => { const b = Array.from(document.querySelectorAll("#modal button")).find((x) => /^Stornieren$/.test(x.innerText.trim())); if (b) b.click(); });
+    await wait(700);
+    check((await stock()) === 10, "Storno des Abgangs stellt Bestand 10 wieder her (" + (await stock()) + ")");
+    check((await page.$$('[data-act="btm-storno"]')).length === 1, "Stornierter Eintrag und Storno selbst sind nicht erneut stornierbar");
+    await page.click('[data-act="btm-check-new"]');
+    await page.waitForSelector('form[data-form="btm-check"]', { timeout: 5000 }).catch(() => {});
+    await submit("btm-check");
+    const tb = await view();
+    check(/Bestand 10 Stück/.test(tb) && /Test Admin/.test(tb), "Monatsprüfung gespeichert und angezeigt");
+    const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+    check(!wide, "BtM-Karteikarte ohne horizontales Scrollen der Seite");
+    await shot(page, "app-btm-karte");
+    await page.click('[data-act="btm-print"]');
+    await wait(300);
+    const pr = await page.evaluate(() => document.querySelector("#printArea").innerText);
+    check(/Betäubungsmittel-Nachweis/.test(pr) && /Namenszeichen/.test(pr) && /Muster-Apotheke/.test(pr), "Ausdruck enthält Nachweis, Einträge und Namenszeichen-Spalte");
+    await wait(2500);
+    check(pushed.btm_items >= 1 && pushed.btm_entries === 3 && pushed.btm_checks === 1, "BtM übertragen (Präparate " + pushed.btm_items + ", Einträge " + pushed.btm_entries + ", Prüfungen " + pushed.btm_checks + ")");
+    const sent = pushedBodies.find((x) => x.corrects);
+    check(!!sent && sent.kind === "zugang" && Number(sent.qty) === 2.5, "Storno wird mit corrects + Gegenbuchung gesendet");
+    await page.evaluate(() => { location.hash = "#btm"; });
+    await wait(700);
+    check(/Fentanyl Test/.test(await view()) && /10 Stück/.test(await view()), "Präparateliste zeigt Bestand");
+    await shot(page, "app-btm");
+    check(errors.length === before, "BtM-Durchlauf ohne Skriptfehler");
+  }
+
   // alle Ansichten
-  for (const v of ["uebersicht", "fristen", "geraete", "scan", "personen", "standorte", "etiketten", "team", "protokoll", "firma", "konto"]) {
+  for (const v of ["uebersicht", "fristen", "geraete", "scan", "personen", "btm", "standorte", "etiketten", "team", "protokoll", "firma", "konto"]) {
     const before = errors.length;
     await page.evaluate((h) => { location.hash = "#" + h; }, v);
     await wait(900);

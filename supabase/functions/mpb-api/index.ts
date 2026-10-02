@@ -218,7 +218,7 @@ async function createInvoice(tenantId: string, plan: string, period: "monat" | "
 
 // ---------- Push-Verarbeitung ----------
 
-type Res = { id: string; ok: boolean; error?: string; dup?: boolean; stale?: boolean };
+type Res = { id: string; ok: boolean; error?: string; dup?: boolean; stale?: boolean; seq?: number };
 
 const ENTRY_TYPES = ["funktionspruefung", "einweisung", "stk", "mtk", "it", "instandhaltung", "stoerung", "vorkommnis"];
 const PULL_ENTRY_LIMIT = 5000;
@@ -229,7 +229,7 @@ async function ownOrFree(table: "locations" | "devices" | "persons", tid: string
   if (!r.length) return "free";
   return String(r[0].tenant_id) === tid ? "own" : "foreign";
 }
-async function markStale(table: "locations" | "devices" | "persons", tid: string, id: string, upd: string): Promise<boolean> {
+async function markStale(table: "locations" | "devices" | "persons" | "btm_items", tid: string, id: string, upd: string): Promise<boolean> {
   const r = await sql.unsafe(`update mpbuch.${table} set synced_at = now() where id = $1 and tenant_id = $2 and updated_at > $3::timestamptz returning id`, [id, tid, upd]);
   return r.length > 0;
 }
@@ -349,6 +349,109 @@ async function addEntry(tid: string, me: any, clientId: string | null, rec: any,
   }
 }
 
+// ---------- BtM-Buch (zuschaltbares Modul) ----------
+const BTM_UNITS = ["Stück", "ml", "mg", "g", "µg"];
+function qty3(v: unknown): number | null {
+  const n = num(v);
+  if (n === null) return null;
+  const r = Math.round(n * 1000) / 1000;
+  return r >= 0 && r <= 100000000 ? r : null;
+}
+// Präparat = eine Karteikarte. `deleted` bedeutet hier „archiviert": die Karte bleibt lesbar.
+async function upsertBtmItem(tid: string, rec: any): Promise<Res> {
+  const id = String(rec?.id || "").toLowerCase();
+  if (!UUID_RE.test(id)) return { id, ok: false, error: "bad_id" };
+  const name = str(rec.name, 200);
+  if (!name) return { id, ok: false, error: "name_required" };
+  const unit = BTM_UNITS.includes(String(rec.unit)) ? String(rec.unit) : "Stück";
+  const ex = await sql`select tenant_id, unit from mpbuch.btm_items where id = ${id} limit 1`;
+  if (ex.length && String(ex[0].tenant_id) !== tid) return { id, ok: false, error: "bad_id" };
+  const deleted = rec.deleted === true;
+  if (ex.length) {
+    const b = await sql`select coalesce(sum(case when kind = 'zugang' then qty else -qty end), 0)::float8 as b, count(*)::int as n from mpbuch.btm_entries where tenant_id = ${tid} and item_id = ${id}`;
+    // Mit Bestand wird nicht archiviert; die Einheit steht fest, sobald gebucht wurde.
+    if (deleted && Math.abs(Number(b[0].b)) > 0.0005) return { id, ok: false, error: "btm_has_stock" };
+    if (b[0].n > 0 && unit !== ex[0].unit) return { id, ok: false, error: "btm_unit_fixed" };
+  }
+  const upd = isoOrNow(rec.updated_at);
+  await sql`insert into mpbuch.btm_items (id, tenant_id, name, form, unit, storage, note, deleted, created_at, updated_at)
+    values (${id}, ${tid}, ${name}, ${strOrNull(rec.form, 200)}, ${unit}, ${strOrNull(rec.storage, 200)}, ${strOrNull(rec.note, 1000)}, ${deleted}, ${isoOrNow(rec.created_at)}, ${upd})
+    on conflict (id) do update set name = excluded.name, form = excluded.form, unit = excluded.unit, storage = excluded.storage, note = excluded.note,
+      deleted = excluded.deleted, updated_at = excluded.updated_at, synced_at = now()
+    where mpbuch.btm_items.tenant_id = excluded.tenant_id and mpbuch.btm_items.updated_at <= excluded.updated_at`;
+  if (await markStale("btm_items", tid, id, upd)) return { id, ok: true, stale: true };
+  return { id, ok: true };
+}
+
+// Zu-/Abgang: nur anfügen. Je Präparat seriell (Sperre), damit der Bestand nie unter null fällt.
+// Storno = Gegenbuchung mit `corrects`; Art und Menge gibt der stornierte Eintrag vor.
+async function addBtmEntry(tid: string, me: any, clientId: string | null, rec: any): Promise<Res> {
+  const id = String(rec?.id || "").toLowerCase();
+  if (!UUID_RE.test(id)) return { id, ok: false, error: "bad_id" };
+  const itemId = String(rec.item_id || "").toLowerCase();
+  if (!UUID_RE.test(itemId)) return { id, ok: false, error: "btm_item_not_found" };
+  const date = ymdOk(rec.date);
+  if (!date || date > todayYmd()) return { id, ok: false, error: "bad_date" };
+  let kind = String(rec.kind || "");
+  if (kind !== "zugang" && kind !== "abgang") return { id, ok: false, error: "bad_type" };
+  let qty = qty3(rec.qty);
+  const corrects: string | null = rec.corrects ? String(rec.corrects).toLowerCase() : null;
+  if (corrects && (!UUID_RE.test(corrects) || corrects === id)) return { id, ok: false, error: "bad_corrects" };
+  if (!corrects && (qty === null || qty <= 0)) return { id, ok: false, error: "btm_bad_qty" };
+  try {
+    return await sql.begin(async (tx: any): Promise<Res> => {
+      await tx`select pg_advisory_xact_lock(hashtextextended(${itemId}::text, 0))`;
+      const it = await tx`select deleted from mpbuch.btm_items where id = ${itemId} and tenant_id = ${tid} limit 1`;
+      if (!it.length) return { id, ok: false, error: "btm_item_not_found" };
+      const dup = await tx`select tenant_id, seq::float8 as seq from mpbuch.btm_entries where id = ${id} limit 1`;
+      if (dup.length) return String(dup[0].tenant_id) === tid ? { id, ok: true, dup: true, seq: Number(dup[0].seq) } : { id, ok: false, error: "bad_id" };
+      if (corrects) {
+        const o = await tx`select item_id, kind, qty::float8 as qty, corrects from mpbuch.btm_entries where id = ${corrects} and tenant_id = ${tid} limit 1`;
+        if (!o.length || String(o[0].item_id) !== itemId || o[0].corrects) return { id, ok: false, error: "bad_corrects" };
+        const c = await tx`select 1 from mpbuch.btm_entries where corrects = ${corrects} limit 1`;
+        if (c.length) return { id, ok: false, error: "already_corrected" };
+        kind = o[0].kind === "zugang" ? "abgang" : "zugang"; qty = Number(o[0].qty);
+      } else if (it[0].deleted === true) return { id, ok: false, error: "btm_item_archived" };
+      const b = await tx`select coalesce(sum(case when kind = 'zugang' then qty else -qty end), 0)::float8 as b from mpbuch.btm_entries where tenant_id = ${tid} and item_id = ${itemId}`;
+      if (kind === "abgang" && Number(b[0].b) - (qty as number) < -0.0005) return { id, ok: false, error: "btm_negative" };
+      const ins = await tx`insert into mpbuch.btm_entries (id, tenant_id, item_id, date, kind, qty, party, doctor, doc_no, note, corrects, member_id, member_name, client_id, created_at)
+        values (${id}, ${tid}, ${itemId}, ${date}, ${kind}, ${qty}, ${strOrNull(rec.party, 400)}, ${strOrNull(rec.doctor, 200)}, ${strOrNull(rec.doc_no, 80)},
+          ${strOrNull(rec.note, 1000)}, ${corrects}, ${me.id}, ${str(me.name || me.email, 200)}, ${clientId}, ${isoOrNow(rec.created_at)})
+        returning seq::float8 as seq`;
+      return { id, ok: true, seq: Number(ins[0].seq) };
+    });
+  } catch (e) {
+    if ((e as any)?.code === "23505") return { id, ok: false, error: "already_corrected" };
+    throw e;
+  }
+}
+
+// Monatliche Bestandsprüfung (nur anfügen)
+async function addBtmCheck(tid: string, me: any, rec: any): Promise<Res> {
+  const id = String(rec?.id || "").toLowerCase();
+  if (!UUID_RE.test(id)) return { id, ok: false, error: "bad_id" };
+  const itemId = String(rec.item_id || "").toLowerCase();
+  if (!UUID_RE.test(itemId)) return { id, ok: false, error: "btm_item_not_found" };
+  const month = String(rec.month || "");
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return { id, ok: false, error: "bad_date" };
+  const checkDate = ymdOk(rec.check_date);
+  if (!checkDate || checkDate > todayYmd()) return { id, ok: false, error: "bad_date" };
+  const checker = str(rec.checker, 200);
+  if (!checker) return { id, ok: false, error: "name_required" };
+  const balance = qty3(rec.balance);
+  if (balance === null) return { id, ok: false, error: "btm_bad_qty" };
+  const it = await sql`select 1 from mpbuch.btm_items where id = ${itemId} and tenant_id = ${tid} limit 1`;
+  if (!it.length) return { id, ok: false, error: "btm_item_not_found" };
+  const ins = await sql`insert into mpbuch.btm_checks (id, tenant_id, item_id, month, checker, check_date, balance, note, member_id, member_name, created_at)
+    values (${id}, ${tid}, ${itemId}, ${month}, ${checker}, ${checkDate}, ${balance}, ${strOrNull(rec.note, 1000)}, ${me.id}, ${str(me.name || me.email, 200)}, ${isoOrNow(rec.created_at)})
+    on conflict (id) do nothing returning id`;
+  if (!ins.length) {
+    const own = await sql`select 1 from mpbuch.btm_checks where id = ${id} and tenant_id = ${tid} limit 1`;
+    return own.length ? { id, ok: true, dup: true } : { id, ok: false, error: "bad_id" };
+  }
+  return { id, ok: true };
+}
+
 async function safeRec(rec: any, fn: () => Promise<Res>): Promise<Res> {
   try { return await fn(); } catch (e) {
     const code = String((e as any)?.code || "");
@@ -361,6 +464,11 @@ const DEVICE_COLS = `id, inv_no, name, kind, model, serial, year, manufacturer, 
   stk_interval_months, mtk_interval_years, commissioned::text as commissioned, decommissioned_at::text as decommissioned_at, note, deleted, created_at, updated_at`;
 const ENTRY_COLS = `id, device_id, type, date::text as date, result, performer, instructor, persons, next_due::text as next_due, note,
   corrects, member_id, member_name, client_id, created_at, received_at`;
+
+const BTM_ITEM_COLS = `id, name, form, unit, storage, note, deleted, created_at, updated_at`;
+const BTM_ENTRY_COLS = `id, seq::float8 as seq, item_id, date::text as date, kind, qty::float8 as qty, party, doctor, doc_no, note,
+  corrects, member_id, member_name, client_id, created_at, received_at`;
+const BTM_CHECK_COLS = `id, item_id, month, checker, check_date::text as check_date, balance::float8 as balance, note, member_id, member_name, created_at, received_at`;
 
 // ---------- Handler ----------
 Deno.serve(async (req: Request) => {
@@ -412,12 +520,28 @@ Deno.serve(async (req: Request) => {
       const entries = since
         ? await sql.unsafe(`select ${ENTRY_COLS} from mpbuch.entries where tenant_id = $1 and received_at > $2::timestamptz order by received_at asc limit ${PULL_ENTRY_LIMIT}`, [tid, since])
         : await sql.unsafe(`select ${ENTRY_COLS} from mpbuch.entries where tenant_id = $1 order by received_at asc limit ${PULL_ENTRY_LIMIT}`, [tid]);
-      const more = entries.length >= PULL_ENTRY_LIMIT;
-      if (more) serverTime = new Date((entries[entries.length - 1].received_at as Date).getTime() - 1).toISOString();
+      // BtM-Buch: archivierte Präparate werden mitgeliefert (die Karteikarte bleibt lesbar)
+      const btm_items = since
+        ? await sql.unsafe(`select ${BTM_ITEM_COLS} from mpbuch.btm_items where tenant_id = $1 and synced_at > $2::timestamptz`, [tid, since])
+        : await sql.unsafe(`select ${BTM_ITEM_COLS} from mpbuch.btm_items where tenant_id = $1`, [tid]);
+      const btm_entries = since
+        ? await sql.unsafe(`select ${BTM_ENTRY_COLS} from mpbuch.btm_entries where tenant_id = $1 and received_at > $2::timestamptz order by received_at asc limit ${PULL_ENTRY_LIMIT}`, [tid, since])
+        : await sql.unsafe(`select ${BTM_ENTRY_COLS} from mpbuch.btm_entries where tenant_id = $1 order by received_at asc limit ${PULL_ENTRY_LIMIT}`, [tid]);
+      const btm_checks = since
+        ? await sql.unsafe(`select ${BTM_CHECK_COLS} from mpbuch.btm_checks where tenant_id = $1 and received_at > $2::timestamptz order by received_at asc limit ${PULL_ENTRY_LIMIT}`, [tid, since])
+        : await sql.unsafe(`select ${BTM_CHECK_COLS} from mpbuch.btm_checks where tenant_id = $1 order by received_at asc limit ${PULL_ENTRY_LIMIT}`, [tid]);
+      // Seitenweise: der Cursor rückt nur bis zur frühesten vollen Seite vor; der Rest kommt in der nächsten Runde (doppelte fallen per ID weg)
+      let more = false;
+      for (const page of [entries, btm_entries, btm_checks]) {
+        if (page.length < PULL_ENTRY_LIMIT) continue;
+        const last = new Date((page[page.length - 1].received_at as Date).getTime() - 1).toISOString();
+        if (!more || last < serverTime) serverTime = last;
+        more = true;
+      }
       const members = await sql`select id, name, email, role, active from mpbuch.members where tenant_id = ${tid}`;
       return json({ ok: true, server_time: serverTime, full: !since, more,
         tenant: tenantOut(t), member: { id: me.id, role: me.role, name: me.name, email: me.email },
-        locations, persons, devices, entries, members });
+        locations, persons, devices, entries, members, btm_items, btm_entries, btm_checks });
     }
 
     // -------- push: Offline-Änderungen einspielen --------
@@ -425,7 +549,12 @@ Deno.serve(async (req: Request) => {
       const sub = subState(t);
       if (!sub.active) return json({ error: "subscription_inactive", sub, tenant: tenantOut(t) }, 402);
       const clientId = strOrNull(body.client_id, 64);
-      const out: { locations: Res[]; persons: Res[]; devices: Res[]; entries: Res[] } = { locations: [], persons: [], devices: [], entries: [] };
+      const out: { locations: Res[]; persons: Res[]; devices: Res[]; entries: Res[]; btm_items: Res[]; btm_entries: Res[]; btm_checks: Res[] } =
+        { locations: [], persons: [], devices: [], entries: [], btm_items: [], btm_entries: [], btm_checks: [] };
+      const bItems = Array.isArray(body.btm_items) ? body.btm_items.slice(0, 500) : [];
+      const bEnts = Array.isArray(body.btm_entries) ? body.btm_entries.slice(0, 2000) : [];
+      const bChecks = Array.isArray(body.btm_checks) ? body.btm_checks.slice(0, 1000) : [];
+      const btmOn = !!(t.settings && t.settings.btm === true);
       const locs = Array.isArray(body.locations) ? body.locations.slice(0, 500) : [];
       const pers = Array.isArray(body.persons) ? body.persons.slice(0, 1000) : [];
       const devs = Array.isArray(body.devices) ? body.devices.slice(0, 1000) : [];
@@ -448,6 +577,11 @@ Deno.serve(async (req: Request) => {
         if (devIds.length) for (const r of await sql`select id from mpbuch.devices where tenant_id = ${tid} and id = any(${devIds}::uuid[])`) okDevs.add(String(r.id));
         for (const e of ents) out.entries.push(await safeRec(e, () => addEntry(tid, me, clientId, e, (id) => okDevs.has(id))));
       }
+      // BtM-Buch: Präparate legt die Verwaltung an, buchen und prüfen dürfen alle Mitglieder
+      const btmOff = (r: any): Res => ({ id: String(r?.id || ""), ok: false, error: "btm_off" });
+      for (const i of bItems) out.btm_items.push(!btmOn ? btmOff(i) : isAdmin ? await safeRec(i, () => upsertBtmItem(tid, i)) : denied(i));
+      for (const e of bEnts) out.btm_entries.push(!btmOn ? btmOff(e) : await safeRec(e, () => addBtmEntry(tid, me, clientId, e)));
+      for (const k of bChecks) out.btm_checks.push(!btmOn ? btmOff(k) : await safeRec(k, () => addBtmCheck(tid, me, k)));
       // Protokoll: Löschungen und Berichtigungen
       const okIds = (arr: Res[]) => new Set(arr.filter((r) => r.ok && !r.dup && !r.stale).map((r) => r.id));
       const okL = okIds(out.locations), okP = okIds(out.persons), okD = okIds(out.devices), okE = okIds(out.entries);
@@ -455,6 +589,9 @@ Deno.serve(async (req: Request) => {
       for (const p of pers) if (p?.deleted === true && okP.has(String(p.id).toLowerCase())) await audit(tid, me, "person_deleted", { name: str(p.name, 160) });
       for (const d of devs) if (d?.deleted === true && okD.has(String(d.id).toLowerCase())) await audit(tid, me, "device_deleted", { inv_no: str(d.inv_no, 40), name: str(d.name, 200) });
       for (const e of ents) if (e?.corrects && okE.has(String(e.id).toLowerCase())) await audit(tid, me, "entry_corrected", { entry: String(e.corrects), device_id: String(e.device_id || ""), type: String(e.type || "") });
+      const okBI = okIds(out.btm_items), okBE = okIds(out.btm_entries);
+      for (const i of bItems) if (i?.deleted === true && okBI.has(String(i.id).toLowerCase())) await audit(tid, me, "btm_item_archived", { name: str(i.name, 200) });
+      for (const e of bEnts) if (e?.corrects && okBE.has(String(e.id).toLowerCase())) await audit(tid, me, "btm_corrected", { entry: String(e.corrects), item_id: String(e.item_id || "") });
       const nowRow = await sql`select now() as t`;
       return json({ ok: true, results: out, server_time: (nowRow[0].t as Date).toISOString() });
     }
@@ -571,6 +708,7 @@ Deno.serve(async (req: Request) => {
           due_mail: has("due_mail") ? s.due_mail === true : old.due_mail === true,
           due_mail_to: mailTo,
           due_days: Number.isFinite(dd) ? Math.max(1, Math.min(180, Math.round(dd))) : 30,
+          btm: has("btm") ? s.btm === true : old.btm === true,
         };
       }
       if (name !== null) await sql`update mpbuch.tenants set name = ${name}, updated_at = now() where id = ${tid}`;
@@ -578,6 +716,7 @@ Deno.serve(async (req: Request) => {
       if (billing !== null) await sql`update mpbuch.tenants set billing = ${sql.json(billing)}, updated_at = now() where id = ${tid}`;
       if (settings !== null) await sql`update mpbuch.tenants set settings = ${sql.json(settings)}, updated_at = now() where id = ${tid}`;
       const changed = [name !== null && name !== t.name ? "name" : "", prefix !== null && prefix !== t.inv_prefix ? "inv_prefix" : "", billing !== null ? "billing" : "", settings !== null ? "settings" : ""].filter(Boolean);
+      if (settings !== null && settings.btm !== ((t.settings || {}).btm === true)) await audit(tid, me, settings.btm ? "btm_enabled" : "btm_disabled", {});
       if (changed.length) await audit(tid, me, "company_changed", { fields: changed, ...(changed.includes("name") ? { name } : {}) });
       const fresh = await loadMe(c.uid);
       return json({ ok: true, tenant: tenantOut(fresh!.tenant) });
@@ -610,7 +749,10 @@ Deno.serve(async (req: Request) => {
       const persons = await sql`select id, name, note, active, deleted, created_at, updated_at from mpbuch.persons where tenant_id = ${tid}`;
       const devices = await sql.unsafe(`select ${DEVICE_COLS} from mpbuch.devices where tenant_id = $1 order by inv_no`, [tid]);
       const entries = await sql.unsafe(`select ${ENTRY_COLS} from mpbuch.entries where tenant_id = $1 order by date, created_at`, [tid]);
-      return json({ ok: true, exported_at: new Date().toISOString(), tenant: { id: tid, name: t.name }, locations, persons, devices, entries });
+      const btm_items = await sql.unsafe(`select ${BTM_ITEM_COLS} from mpbuch.btm_items where tenant_id = $1 order by name`, [tid]);
+      const btm_entries = await sql.unsafe(`select ${BTM_ENTRY_COLS} from mpbuch.btm_entries where tenant_id = $1 order by seq`, [tid]);
+      const btm_checks = await sql.unsafe(`select ${BTM_CHECK_COLS} from mpbuch.btm_checks where tenant_id = $1 order by month, received_at`, [tid]);
+      return json({ ok: true, exported_at: new Date().toISOString(), tenant: { id: tid, name: t.name }, locations, persons, devices, entries, btm_items, btm_entries, btm_checks });
     }
 
     // -------- Protokoll --------

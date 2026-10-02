@@ -52,30 +52,46 @@
       corrects: e.corrects || null, created_at: e.created_at };
   }
 
+  function btmEntryOut(e) {
+    return { id: e.id, item_id: e.item_id, date: e.date, kind: e.kind, qty: e.qty, party: e.party || null, doctor: e.doctor || null,
+      doc_no: e.doc_no || null, note: e.note || null, corrects: e.corrects || null, created_at: e.created_at };
+  }
+  function btmCheckOut(c) {
+    return { id: c.id, item_id: c.item_id, month: c.month, checker: c.checker, check_date: c.check_date, balance: c.balance, note: c.note || null, created_at: c.created_at };
+  }
+
   // ---------- Übertragen ----------
   function push(round) {
     round = round || 0;
     var startedAt = Store.nowIso(), admin = isAdmin();
     // Outbox-Einträge ohne Datensatz sind verwaist
     S.outbox = S.outbox.filter(function (o) { var m = Store.mapOf(o.kind); return m && m.has(o.id); });
-    var locs = [], pers = [], devs = [];
+    var locs = [], pers = [], devs = [], bitems = [];
     S.outbox.forEach(function (o) {
       if (o.error) return;
       var rec = Store.mapOf(o.kind).get(o.id);
       if (o.kind === "person") { if (pers.length < 1000) pers.push(rec); }
       else if (!admin) { o.error = "forbidden"; o.error_at = startedAt; }   // Standorte und Geräte pflegt die Verwaltung
       else if (o.kind === "location") { if (locs.length < 500) locs.push(rec); }
-      else if (devs.length < 1000) devs.push(rec);
+      else if (o.kind === "btm_item") { if (bitems.length < 500) bitems.push(rec); }
+      else if (o.kind === "device") { if (devs.length < 1000) devs.push(rec); }
     });
     // Einträge zu Geräten, deren Anlage noch aussteht oder fehlgeschlagen ist, bleiben liegen
     var blocked = {}, waiting = {};
     S.outbox.forEach(function (o) { if (o.kind === "device") { if (o.error) blocked[o.id] = true; else waiting[o.id] = true; } });
     var sentDevs = {}; devs.forEach(function (d) { sentDevs[d.id] = true; });
     var ents = S.pending.filter(function (e) { return !blocked[e.device_id] && (!waiting[e.device_id] || sentDevs[e.device_id]); }).slice(0, 2000);
-    if (!locs.length && !pers.length && !devs.length && !ents.length) { Store.save("outbox"); return Promise.resolve(true); }
+    // BtM-Einträge zu Präparaten, deren Anlage noch aussteht oder fehlgeschlagen ist, bleiben ebenfalls liegen
+    var bBlocked = {}, bWaiting = {}, bSent = {};
+    S.outbox.forEach(function (o) { if (o.kind === "btm_item") { if (o.error) bBlocked[o.id] = true; else bWaiting[o.id] = true; } });
+    bitems.forEach(function (i) { bSent[i.id] = true; });
+    function bReady(e) { return !bBlocked[e.item_id] && (!bWaiting[e.item_id] || bSent[e.item_id]); }
+    var bents = S.btmPending.filter(bReady).slice(0, 2000), bchecks = S.btmChecksPending.filter(bReady).slice(0, 1000);
+    if (!locs.length && !pers.length && !devs.length && !ents.length && !bitems.length && !bents.length && !bchecks.length) { Store.save("outbox"); return Promise.resolve(true); }
 
     st.phase = "push"; emit();
-    return api("push", { client_id: S.meta.device_id, locations: locs, persons: pers, devices: devs, entries: ents.map(entryOut) }, 90000).then(function (res) {
+    return api("push", { client_id: S.meta.device_id, locations: locs, persons: pers, devices: devs, entries: ents.map(entryOut),
+      btm_items: bitems, btm_entries: bents.map(btmEntryOut), btm_checks: bchecks.map(btmCheckOut) }, 90000).then(function (res) {
       if (!handleCommon(res)) return false;
       st.subInactive = false;
       var r = res.data.results || {}, rejected = 0;
@@ -91,12 +107,25 @@
         if (e && x.error === "device_not_found" && (devFailed[e.device_id] || Store.hasPendingChange("device", e.device_id))) return;
         Store.rejectEntry(x.id, x.error || "server_error"); rejected++;
       });
+      applyMaster("btm_item", r.btm_items, startedAt);
+      var itemFailed = {};
+      (r.btm_items || []).forEach(function (x) { if (!x.ok) itemFailed[x.id] = true; });
+      [["entry", r.btm_entries, S.btmPending], ["check", r.btm_checks, S.btmChecksPending]].forEach(function (t) {
+        (t[1] || []).forEach(function (x) {
+          if (x.ok || x.dup) { Store.confirmBtm(t[0], x.id, res.data.server_time, x.seq); return; }
+          var e = t[2].find(function (p) { return p.id === x.id; });
+          if (e && x.error === "btm_item_not_found" && (itemFailed[e.item_id] || Store.hasPendingChange("btm_item", e.item_id))) return;
+          Store.rejectBtm(t[0], x.id, x.error || "server_error"); rejected++;
+        });
+      });
       Store.invalidate();
-      return Store.save(["outbox", "pending", "entries", "failed"], true).then(function () {
+      return Store.save(["outbox", "pending", "entries", "failed", "btmItems", "btmPending", "btmEntries", "btmChecksPending", "btmChecks", "btmFailed"], true).then(function () {
         Store.emit("change", { kind: "push", rejected: rejected });
         var more = S.outbox.some(function (o) { return !o.error; }) ||
-          S.pending.some(function (e) { return !Store.hasPendingChange("device", e.device_id); });
-        var progressed = (r.locations || []).length + (r.persons || []).length + (r.devices || []).length + (r.entries || []).length > 0;
+          S.pending.some(function (e) { return !Store.hasPendingChange("device", e.device_id); }) ||
+          S.btmPending.concat(S.btmChecksPending).some(function (e) { return !Store.hasPendingChange("btm_item", e.item_id); });
+        var progressed = (r.locations || []).length + (r.persons || []).length + (r.devices || []).length + (r.entries || []).length +
+          (r.btm_items || []).length + (r.btm_entries || []).length + (r.btm_checks || []).length > 0;
         if (more && progressed && round < 10) return push(round + 1);
         return true;
       });
@@ -127,19 +156,26 @@
       if (d.tenant) S.tenant = d.tenant;
       if (d.member) S.member = d.member;
       if (d.members) S.members = d.members;
-      if (d.full) S.entries = new Map();
+      if (d.full) { S.entries = new Map(); S.btmEntries = new Map(); S.btmChecks = new Map(); }
       applyRecords("location", d.locations, d.full);
       applyRecords("person", d.persons, d.full);
       applyRecords("device", d.devices, d.full);
       var got = {};
       (d.entries || []).forEach(function (e) { S.entries.set(e.id, e); got[e.id] = true; });
       if (S.pending.length) S.pending = S.pending.filter(function (e) { return !got[e.id]; });
+      // BtM-Buch: archivierte Präparate (deleted) bleiben lesbar und werden deshalb nicht entfernt
+      if (d.full) Array.from(S.btmItems.keys()).forEach(function (id) { if (!Store.hasPendingChange("btm_item", id)) S.btmItems.delete(id); });
+      (d.btm_items || []).forEach(function (r) { if (!Store.hasPendingChange("btm_item", r.id)) S.btmItems.set(r.id, r); });
+      (d.btm_entries || []).forEach(function (e) { S.btmEntries.set(e.id, e); got[e.id] = true; });
+      (d.btm_checks || []).forEach(function (c) { S.btmChecks.set(c.id, c); got[c.id] = true; });
+      if (S.btmPending.length) S.btmPending = S.btmPending.filter(function (e) { return !got[e.id]; });
+      if (S.btmChecksPending.length) S.btmChecksPending = S.btmChecksPending.filter(function (e) { return !got[e.id]; });
       S.meta.since = d.server_time; S.meta.last_sync = Store.nowIso();
       st.blocked = d.member && d.member.active === false ? "member_inactive" : null;
       st.subInactive = !(d.tenant && d.tenant.sub && d.tenant.sub.active);
       st.authLost = false; st.lastError = null; st.lastOk = S.meta.last_sync;
       Store.invalidate();
-      return Store.save(["tenant", "member", "members", "locations", "persons", "devices", "entries", "pending", "meta"], true).then(function () {
+      return Store.save(["tenant", "member", "members", "locations", "persons", "devices", "entries", "pending", "meta", "btmItems", "btmEntries", "btmPending", "btmChecks", "btmChecksPending"], true).then(function () {
         Store.emit("change", { kind: "pull", full: !!d.full });
         return { ok: true, more: !!d.more };
       });
@@ -181,9 +217,9 @@
   }
   function counts() {
     return {
-      pending: S.pending.length + S.outbox.filter(function (o) { return !o.error; }).length,
+      pending: S.pending.length + S.btmPending.length + S.btmChecksPending.length + S.outbox.filter(function (o) { return !o.error; }).length,
       conflicts: S.outbox.filter(function (o) { return !!o.error; }).length,
-      failed: S.failed.length
+      failed: S.failed.length + S.btmFailed.length
     };
   }
   function halt() { halted = true; if (timer) clearTimeout(timer); if (intervalId) clearInterval(intervalId); timer = intervalId = null; }

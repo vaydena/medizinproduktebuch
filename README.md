@@ -1,6 +1,6 @@
 # Vaydena Medizinproduktebuch – Medizinproduktebuch und Bestandsverzeichnis
 
-Geplante Live-Adresse: https://medizinproduktebuch.vaydena.de (Stand 2026-10-02: noch nicht veroeffentlicht)
+Live: https://medizinproduktebuch.vaydena.de (seit 2026-10-02)
 
 Statische Web-App ohne Build-Schritt (HTML + CSS + Vanilla JS) mit Supabase-Backend.
 Einrichtungen fuehren ihr Bestandsverzeichnis (MPBetreibV § 14) und je Geraet das Medizinproduktebuch (§ 13):
@@ -9,7 +9,7 @@ QR-Etikett (app.html#g=<Inventarnummer>) aufgerufen; Eintraege gehen auch ohne I
 Abrechnung als Abo je Einrichtung, Zahlung ausschliesslich per Bankueberweisung + GiroCode.
 
 Reine Dokumentationssoftware, kein Medizinprodukt: keine Messwert-Auswertung, keine Geraetesteuerung,
-keine Patientendaten. Die Betreiberpflichten bleiben beim Kunden. Werbetexte nur fuer vorhandene Funktionen.
+keine Patientendaten (einzige Ausnahme: optionales Modul BtM-Buch, `tenant.settings.btm`, Empfaenger koennen Patienten sein -> AVV vor Nutzung). Die Betreiberpflichten bleiben beim Kunden. Werbetexte nur fuer vorhandene Funktionen.
 
 ## Struktur
 
